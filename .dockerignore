@@ -1,0 +1,24 @@
+# Build artefacts and local state
+node_modules
+.next
+out
+coverage
+
+# Secrets must come from the platform, never from a baked layer.
+.env
+.env.*
+!.env.example
+
+# Local tooling noise
+.git
+.github
+.vscode
+.idea
+*.log
+npm-debug.log*
+.DS_Store
+
+# Not needed to build or run the server
+docs
+tests
+README.md

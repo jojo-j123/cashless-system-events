@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { users } from '@/lib/db/schema';
 import { route } from '@/lib/api/handler';
+import { clientIp } from '@/lib/api/client-ip';
 import { ok } from '@/lib/api/responses';
 import { loginSchema } from '@/lib/api/schemas';
 import { verifyPassword, needsRehash, hashPassword } from '@/lib/auth/password';
@@ -23,14 +24,19 @@ const LOCKOUT_MINUTES = 15;
 
 export const POST = route({ public: true, body: loginSchema }, async ({ request, body }) => {
   const db = getDb();
-  const ipAddress =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  const ipAddress = clientIp(request.headers);
 
   // Limit by IP before touching the database, so credential stuffing costs the
   // attacker rather than us.
-  await enforceRateLimit(db, RATE_LIMITS.login, ipAddress, 'Too many sign-in attempts.');
+  //
+  // When the deployment cannot vouch for an IP (see lib/api/client-ip.ts) we
+  // skip this limit rather than bucketing every caller under a shared "unknown"
+  // key. A shared bucket would let one attacker exhaust it and lock every
+  // cashier out mid-event — trading a rate limit for a denial of service. The
+  // per-email limit and the account lockout below still apply either way.
+  if (ipAddress) {
+    await enforceRateLimit(db, RATE_LIMITS.login, ipAddress, 'Too many sign-in attempts.');
+  }
   await enforceRateLimit(db, RATE_LIMITS.login, `email:${body.email}`, 'Too many sign-in attempts.');
 
   const [user] = await db

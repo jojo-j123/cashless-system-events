@@ -1,0 +1,63 @@
+# Production-parity stack for the soft test.
+#
+# The point of this file is to rehearse the real thing: same image, same
+# migration step, same health check, real Postgres. It is not a development
+# environment — use `npm run dev` for that.
+#
+#   cp .env.example .env.docker    # then fill in APP_SECRET and APP_ORIGIN
+#   docker compose up --build -d db
+#   docker compose run --rm migrate
+#   docker compose up --build -d app
+#
+# Point a USB reader at http://localhost:3000 and tap a real card before you
+# trust any of this on event night.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cashless
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cashless-local-only}
+      POSTGRES_DB: cashless
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cashless -d cashless']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot release step. Run this before `app`, and again after any deploy
+  # that carries a new migration.
+  migrate:
+    build:
+      context: .
+    command: ['npm', 'run', 'db:migrate']
+    environment:
+      DATABASE_URL: postgres://cashless:${POSTGRES_PASSWORD:-cashless-local-only}@db:5432/cashless
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    build:
+      context: .
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgres://cashless:${POSTGRES_PASSWORD:-cashless-local-only}@db:5432/cashless
+      APP_SECRET: ${APP_SECRET:?set APP_SECRET - generate with: openssl rand -base64 48}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      # No proxy in front of this stack, so no forwarded header is trustworthy.
+      # In real deployment this becomes `cloudflare` or `forwarded`.
+      TRUSTED_PROXY: none
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

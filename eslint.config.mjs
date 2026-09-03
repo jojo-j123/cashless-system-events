@@ -15,7 +15,13 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        // scripts/*.mjs is plain ESM and deliberately outside tsconfig (it has to
+        // run in the production image without tsx), but it is still the code that
+        // applies migrations — it gets the same type-aware rules as everything else.
+        projectService: { allowDefaultProject: ['scripts/*.mjs'] },
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       // In financial code an unhandled promise is a silently lost transaction.
@@ -33,7 +39,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.ts', 'scripts/**/*.ts'],
+    files: ['tests/**/*.ts', 'scripts/**/*.ts', 'scripts/**/*.mjs'],
     rules: { '@typescript-eslint/no-floating-promises': 'off' },
+  },
+  {
+    // Plain ESM run directly by node, so the Node globals are not implied by a
+    // TS lib the way they are elsewhere.
+    files: ['**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
   },
 );

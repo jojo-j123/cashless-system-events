@@ -13,7 +13,7 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "tsx scripts/reset.ts",
     "test": "vitest run",

@@ -8,6 +8,7 @@ import { Actor, loadActor } from '../authz/actor';
 import { CSRF_HEADER, SESSION_COOKIE, resolveSession } from '../auth/session';
 import { hashToken } from '../auth/tokens';
 import { ForbiddenError, NotFoundError, UnauthenticatedError } from '../errors';
+import { clientIp } from './client-ip';
 import type { AuditContext } from '../audit';
 
 export interface RequestContext {
@@ -30,10 +31,7 @@ export async function buildContext(request: NextRequest): Promise<RequestContext
   const headerBag = await headers();
   const cookieBag = await cookies();
 
-  const ipAddress =
-    headerBag.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    headerBag.get('x-real-ip') ??
-    null;
+  const ipAddress = clientIp(headerBag);
   const userAgent = headerBag.get('user-agent');
 
   const session = await resolveSession(db, cookieBag.get(SESSION_COOKIE)?.value);
