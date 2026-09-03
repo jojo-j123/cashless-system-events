@@ -24,8 +24,14 @@ export interface PageSession {
  * every API route.
  */
 export async function requireSession(permission?: Permission): Promise<PageSession> {
-  const db = getDb();
+  // `cookies()` must be awaited before anything touches the database. Reading it
+  // is what opts a page out of static prerendering; until then Next treats the
+  // render as build-time work, and `getDb()` would resolve DATABASE_URL on a
+  // build machine that has no business holding it. Getting this order wrong
+  // fails the build where the variable is absent, and silently couples the
+  // build to the production database where it is present.
   const cookieBag = await cookies();
+  const db = getDb();
   const session = await resolveSession(db, cookieBag.get(SESSION_COOKIE)?.value);
   if (!session) redirect('/login');
 
@@ -54,8 +60,10 @@ export async function requireSession(permission?: Permission): Promise<PageSessi
 
 /** Null instead of a redirect, for pages that render differently when signed out. */
 export async function optionalSession(): Promise<PageSession | null> {
-  const db = getDb();
+  // Cookies first — see the note in requireSession. This is the path `/` takes,
+  // and it is where the build actually broke.
   const cookieBag = await cookies();
+  const db = getDb();
   const session = await resolveSession(db, cookieBag.get(SESSION_COOKIE)?.value);
   if (!session) return null;
 
