@@ -128,6 +128,42 @@ Supabase's true direct host (`db.<ref>.supabase.co`) is IPv6-only and GitHub's
 runners are IPv4, so the session pooler is the correct target here rather than a
 compromise.
 
+## The public API surface, and why it is closed
+
+Supabase publishes the `public` schema over an auto-generated REST API, and
+pre-grants every newly created table to an `anon` role whose API key is public
+by design. On a fresh project the default privilege for a table created by
+`postgres` is `arwdDxtm` to `anon` — INSERT, SELECT, UPDATE and DELETE, to
+unauthenticated callers.
+
+For a typical CRUD app that is the product, paired with RLS policies. Here it
+would be a hole straight through the financial model. Every guarantee in this
+codebase assumes writes arrive through the application: the double-entry ledger,
+the `FOR UPDATE` locks, idempotency, two-person approval. And `accounts.balance`
+carries no append-only trigger — only the ledger, audit, inventory-movement and
+card-event tables do — so a direct `UPDATE accounts SET balance = …` over that
+REST endpoint would set any wallet to any number, with the ledger none the wiser.
+
+`0002_lock_down_public_schema.sql` closes it: row-level security on every table
+in `public` with no policies (deny-all for any role lacking `BYPASSRLS`), plus
+revoking the `anon` and `authenticated` grants, present and future. The
+application connects as `postgres`, which has `BYPASSRLS` on Supabase — checked
+against `pg_roles`, not assumed — so it is unaffected.
+
+Verified against a real database rather than reasoned about: a role granted
+`ALL` privileges but lacking `BYPASSRLS` reads **0 rows**, its
+`UPDATE accounts SET balance = 999999` reports `UPDATE 0`, and its `INSERT` is
+refused with `new row violates row-level security policy`. The owner sees its
+data normally throughout.
+
+The migration is a no-op on plain Postgres — local development, CI, a container
+deployment — where `anon` and `authenticated` do not exist.
+
+> **Adding a table later?** RLS is off by default on a new table, so any future
+> migration that creates one in `public` must also
+> `ALTER TABLE public.<name> ENABLE ROW LEVEL SECURITY;`. Supabase's security
+> advisor flags a missed one, but treat that as the backstop, not the plan.
+
 ## Trade-offs you are accepting
 
 The transaction pooler is genuinely fine for the application's correctness. Every

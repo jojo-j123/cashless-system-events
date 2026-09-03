@@ -42,12 +42,29 @@ async function main() {
   // would interleave DDL while both believing they held it. That failure is
   // silent, which is the worst kind. So migrations demand a session-capable
   // connection: `DIRECT_DATABASE_URL` when set, otherwise `DATABASE_URL`.
-  const connectionString = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
+  // Treat blank as absent. GitHub Actions expands an unset secret to the empty
+  // string rather than leaving the variable undefined, so `??` would hand us
+  // "" and we would fail claiming nothing was configured while DATABASE_URL sat
+  // there perfectly valid.
+  const direct = (process.env.DIRECT_DATABASE_URL ?? '').trim();
+  const fallback = (process.env.DATABASE_URL ?? '').trim();
+  const connectionString = direct || fallback;
+
   if (!connectionString) {
-    throw new Error('Neither DIRECT_DATABASE_URL nor DATABASE_URL is set.');
+    throw new Error(
+      'No database connection configured. Set DIRECT_DATABASE_URL (preferred: a ' +
+        'session-capable connection) or DATABASE_URL.',
+    );
   }
-  if (process.env.DIRECT_DATABASE_URL) {
+
+  if (direct) {
     log('using DIRECT_DATABASE_URL for migrations (session-scoped advisory lock)');
+  } else {
+    log('DIRECT_DATABASE_URL not set; migrating via DATABASE_URL', {
+      warning:
+        'If DATABASE_URL points at a transaction-mode pooler, the advisory lock ' +
+        'below cannot protect against concurrent migrators.',
+    });
   }
 
   // A dedicated client, not a pool: an advisory lock belongs to the session

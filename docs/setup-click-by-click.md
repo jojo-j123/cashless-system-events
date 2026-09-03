@@ -159,6 +159,11 @@ The answer must be exactly **0**. That is the whole financial guarantee in one
 number: every point that exists came from somewhere and went somewhere. If it is
 ever not zero, stop and investigate before taking real payments.
 
+> **Your data is not readable from the internet.** The database host publishes
+> new tables at a public web address by default. Step 7 shuts that door
+> automatically, so balances can only be changed by going through the app, where
+> the safety rules live. Nothing for you to do — worth knowing it was handled.
+
 ---
 
 ## Step 9 — Your own domain, on Cloudflare (optional)
