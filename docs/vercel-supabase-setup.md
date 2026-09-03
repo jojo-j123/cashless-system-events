@@ -1,5 +1,9 @@
 # Vercel + Supabase deployment
 
+> **Not a developer?** Use [setup-click-by-click.md](./setup-click-by-click.md)
+> instead — same result, done entirely in a browser, no commands to type.
+> This document is the engineering reference for the same deployment.
+
 This is the active deployment path: the Next.js app on Vercel, Postgres on
 Supabase, both in Frankfurt.
 
