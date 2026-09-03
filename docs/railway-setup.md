@@ -1,5 +1,13 @@
 # Railway Deployment
 
+> **This is the alternative path.** The active deployment is Vercel + Supabase —
+> see [vercel-supabase-setup.md](./vercel-supabase-setup.md).
+>
+> Keep this document. The container shape described here is architecturally
+> sturdier under sustained load (no cold starts, a real long-lived pool, no
+> function timeout), and it is where to go if the serverless deployment starts
+> creaking. `Dockerfile`, `docker-compose.yml` and `railway.json` all still work.
+
 This guide walks through setting up the cashless system on Railway with a managed Postgres database and GitHub Actions auto-deployment.
 
 ## Prerequisites

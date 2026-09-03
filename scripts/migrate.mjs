@@ -30,9 +30,24 @@ function log(msg, extra = {}) {
 }
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL;
+  // `DATABASE_URL` may point at a transaction-mode pooler (Supabase Supavisor on
+  // :6543, PgBouncer, etc.), which is correct for the application — every
+  // transaction runs start-to-finish on one pinned backend, so `FOR UPDATE` and
+  // the deferred sum-to-zero trigger behave exactly as they do on a direct
+  // connection.
+  //
+  // Migrations are the exception. `pg_advisory_lock` is *session*-scoped, and a
+  // transaction-mode pooler hands the session back after each statement — the
+  // lock would be taken and dropped immediately, and two concurrent migrators
+  // would interleave DDL while both believing they held it. That failure is
+  // silent, which is the worst kind. So migrations demand a session-capable
+  // connection: `DIRECT_DATABASE_URL` when set, otherwise `DATABASE_URL`.
+  const connectionString = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error('DATABASE_URL is not set.');
+    throw new Error('Neither DIRECT_DATABASE_URL nor DATABASE_URL is set.');
+  }
+  if (process.env.DIRECT_DATABASE_URL) {
+    log('using DIRECT_DATABASE_URL for migrations (session-scoped advisory lock)');
   }
 
   // A dedicated client, not a pool: an advisory lock belongs to the session

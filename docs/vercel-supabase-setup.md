@@ -1,0 +1,171 @@
+# Vercel + Supabase deployment
+
+This is the active deployment path: the Next.js app on Vercel, Postgres on
+Supabase, both in Frankfurt.
+
+For the container path (Railway / Fly / Render), see
+[railway-setup.md](./railway-setup.md). That shape is architecturally sturdier
+under sustained load — see [Trade-offs](#trade-offs-you-are-accepting) below for
+what you give up here and when it would start to matter.
+
+## What already exists
+
+| Thing | Value |
+|---|---|
+| Supabase project | `cashless-system-events` |
+| Project ref | `odovefouvbjsixklarhv` |
+| Region | `eu-central-1` (Frankfurt) |
+| Cost | $0/month (free tier) |
+| Dashboard | https://supabase.com/dashboard/project/odovefouvbjsixklarhv |
+
+The database is **created but empty**. Migrations are applied by GitHub Actions
+(step 4), not by hand — see [Why migrations run in
+CI](#why-migrations-run-in-ci).
+
+Vercel function region is pinned to `fra1` in `vercel.json`, which is the same
+city as the database. Do not change one without the other: every checkout holds
+row locks across several statements, and putting a continent between the app and
+the database multiplies the lock hold time at the busiest bar.
+
+## Setup
+
+### 1. Install the Vercel GitHub App
+
+https://github.com/apps/vercel → grant access to `cashless-system-events`.
+
+Without this, Vercel cannot link the repository and there is no deploy on push.
+
+### 2. Import the project into Vercel
+
+https://vercel.com/new → select `jojo-j123/cashless-system-events` → Import.
+
+Team: **Nile Digital**. Do not deploy yet — it will fail without the environment
+variables in step 3. A failed first deploy is harmless; it just wastes a cycle.
+
+### 3. Environment variables (Vercel → Settings → Environment Variables)
+
+Get both connection strings from
+**Supabase → Connect** (top of the dashboard):
+
+| Variable | Value | Notes |
+|---|---|---|
+| `DATABASE_URL` | Connect → **Transaction pooler** (port `6543`) | Runtime. Correct for serverless. |
+| `APP_SECRET` | generate — see below | Signs QR payloads. **Back it up.** |
+| `APP_ORIGIN` | `https://<your-vercel-domain>` | CSRF allowlist. Update when you add a custom domain. |
+| `TRUSTED_PROXY` | `forwarded` | Vercel is the single proxy. Use `cloudflare` **only** after locking the origin. |
+| `NEXT_PUBLIC_ENABLE_NFC_SIMULATOR` | `false` | Compiled in at build time. Must be false in production. |
+
+Generate `APP_SECRET` yourself — do not let anyone generate it into a chat log
+or a ticket:
+
+```bash
+openssl rand -base64 48                      # macOS / Linux / Git Bash
+```
+```powershell
+[Convert]::ToBase64String((1..48|%{Get-Random -Max 256}))   # PowerShell
+```
+
+`APP_SECRET` must be identical across every deploy and instance. Rotating it
+invalidates every outstanding QR code, so store it somewhere you will still have
+it on event day.
+
+You do **not** need to set `DB_POOL_MAX`. The app detects Vercel and defaults to
+one connection per instance, which is what a pooled serverless deployment wants.
+
+### 4. GitHub secret for migrations
+
+**GitHub → Settings → Secrets and variables → Actions → New secret**
+
+| Secret | Value |
+|---|---|
+| `DIRECT_DATABASE_URL` | Supabase → Connect → **Session pooler** (port `5432`) |
+
+This must be the **session** pooler, not the transaction pooler. See below.
+
+### 5. Merge to main
+
+The workflow runs `npm run verify`, then applies migrations. Vercel builds and
+deploys in parallel off the same push.
+
+### 6. Confirm it is actually alive
+
+```bash
+curl https://<your-vercel-domain>/api/health
+```
+
+That endpoint does a real database round trip, so a 200 means the app reached
+Postgres — not merely that a process is running.
+
+Then prove the ledger invariant holds on the live database
+(Supabase → SQL Editor):
+
+```sql
+SELECT sum(balance) FROM accounts;              -- must be exactly 0
+SELECT * FROM account_reconciliation WHERE drift <> 0;  -- must be empty
+```
+
+## Why migrations run in CI
+
+Two reasons, and both are about the advisory lock in `scripts/migrate.mjs`.
+
+**Not on boot.** A serverless function that migrated on cold start would run the
+migrator from every instance that spins up. The advisory lock would hold the
+line, but the right fix is not to create the stampede in the first place.
+
+**Not through the transaction pooler.** `pg_advisory_lock` is *session*-scoped.
+A transaction-mode pooler (`:6543`) returns the session to the pool between
+statements, so the lock is taken and dropped immediately. Two concurrent
+migrators would then interleave DDL while both believed they held it — and that
+failure is silent, which makes it the worst kind. `migrate.mjs` therefore
+prefers `DIRECT_DATABASE_URL` and the workflow points it at the **session**
+pooler (`:5432`), which keeps session state.
+
+Supabase's true direct host (`db.<ref>.supabase.co`) is IPv6-only and GitHub's
+runners are IPv4, so the session pooler is the correct target here rather than a
+compromise.
+
+## Trade-offs you are accepting
+
+The transaction pooler is genuinely fine for the application's correctness. Every
+money path runs inside one transaction, and a transaction-mode pooler pins one
+backend for that transaction's whole life — so `SELECT … FOR UPDATE` row locks
+and the `DEFERRABLE INITIALLY DEFERRED` sum-to-zero trigger behave exactly as
+they do on a direct connection. Nothing in the financial model is weakened.
+
+What you actually give up versus a container:
+
+- **Cold starts.** An idle deployment takes ~1–3s on the first tap. Noticeable in
+  a queue, not fatal. Sustained traffic keeps instances warm.
+- **Connection ceiling under burst.** Serverless concurrency is the thing that
+  scales, and each instance takes a pooler slot. The free tier's pooler is the
+  first thing that will break if you outgrow this.
+- **Function timeout.** A checkout killed at the platform limit drops its
+  connection, and Postgres rolls the transaction back. That is a *failed*
+  checkout, never a partial one — the integrity model holds — but the cashier
+  sees an error.
+
+If you outgrow the free tier: raise the Supabase plan first (the pooler is the
+bottleneck, not Vercel), and move to the container shape in
+[railway-setup.md](./railway-setup.md) if cold starts become a complaint.
+
+## Custom domain and Cloudflare
+
+`*.vercel.app` is fine for a soft test. For the event, put a real domain on it:
+
+1. Vercel → Settings → Domains → add your domain.
+2. Update `APP_ORIGIN` to that HTTPS origin and redeploy — CSRF checks read it.
+3. Only if you front it with Cloudflare: lock the origin first (Authenticated
+   Origin Pulls or an IP allowlist), *then* set `TRUSTED_PROXY=cloudflare`.
+   Setting it without locking the origin is worse than leaving it alone —
+   anyone who reaches the origin directly can set `CF-Connecting-IP` themselves
+   and mint a fresh rate-limit bucket per request.
+
+See [deployment.md](./deployment.md#cloudflare-configuration) for the full
+Cloudflare setup.
+
+## Before event day
+
+The deployment being green is not the same as the system being ready. The
+failures that actually bite are hardware and configuration, and no test suite
+catches them — work the reader constraints and the soft-test checklist in
+[deployment.md](./deployment.md#card-readers-settle-this-before-event-day).

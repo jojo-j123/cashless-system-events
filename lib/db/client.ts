@@ -29,11 +29,31 @@ function connectionString(): string {
   return url;
 }
 
+/**
+ * How many connections this process may hold.
+ *
+ * On a long-lived server one process serves every request, so a real pool is
+ * what you want. On a serverless platform the arithmetic inverts: each
+ * concurrent function instance builds its own pool, so `max` is multiplied by
+ * peak concurrency rather than shared across it. Twenty connections per
+ * instance is a self-inflicted outage at the busiest moment of the event — the
+ * pooler starts refusing connections precisely when every bar is queueing.
+ *
+ * So default to 1 under serverless and let the platform's pooler do the
+ * multiplexing it exists to do. `DB_POOL_MAX` still overrides either way.
+ */
+function poolMax(): number {
+  const explicit = process.env.DB_POOL_MAX;
+  if (explicit) return Number(explicit);
+  const isServerless = Boolean(process.env.VERCEL ?? process.env.AWS_LAMBDA_FUNCTION_NAME);
+  return isServerless ? 1 : 20;
+}
+
 export function getPool(): pg.Pool {
   if (!pool) {
     pool = new pg.Pool({
       connectionString: connectionString(),
-      max: Number(process.env.DB_POOL_MAX ?? 20),
+      max: poolMax(),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
       // Checkout holds row locks; a runaway query must not pin them forever.
