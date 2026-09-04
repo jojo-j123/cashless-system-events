@@ -32,9 +32,9 @@ let migrated = false;
 export async function prepareDatabase(): Promise<Database> {
   const db = getDb();
   if (!migrated) {
-    await db.execute(sql`drop schema if exists public cascade`);
-    await db.execute(sql`drop schema if exists drizzle cascade`);
-    await db.execute(sql`create schema public`);
+    await db.execute(sql.raw(`drop schema if exists public cascade`));
+    await db.execute(sql.raw(`drop schema if exists drizzle cascade`));
+    await db.execute(sql.raw(`create schema public`));
     await migrate(db, { migrationsFolder: './lib/db/migrations' });
     migrated = true;
   }
