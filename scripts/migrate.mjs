@@ -99,6 +99,11 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(JSON.stringify({
+    level: 'error',
+    msg: error.message,
+    code: error.code,
+    detail: error.detail,
+  }));
   process.exit(1);
 });
