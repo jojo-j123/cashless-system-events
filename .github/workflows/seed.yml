@@ -1,0 +1,66 @@
+name: Seed or reset database
+
+# Manual only, and never on a push. Both operations write to whatever
+# DIRECT_DATABASE_URL points at — in this repository that is the live Supabase
+# project — so the trigger is deliberate, typed, and auditable in the Actions log.
+#
+# This exists because the seed has to run from somewhere with a route to the
+# database. A laptop works; so does a runner. The runner is reproducible and
+# leaves a record of who ran it and when.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What to run'
+        required: true
+        type: choice
+        default: seed
+        options:
+          - seed
+          - reset
+          - reset-then-seed
+      confirm:
+        description: 'Type SEED to confirm you mean the production database'
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      # Fails before checkout, so a mistyped confirmation costs nothing.
+      - name: Require confirmation
+        if: inputs.confirm != 'SEED'
+        run: |
+          echo "::error::Confirmation did not match. Type SEED exactly. Nothing was changed."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Session pooler (:5432). These are long multi-statement scripts, not the
+      # short isolated transactions the app's :6543 pooler is tuned for.
+      - name: Reset
+        if: inputs.action == 'reset' || inputs.action == 'reset-then-seed'
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+          CONFIRM_RESET: yes-wipe-everything
+        run: npm run db:reset
+
+      # Nothing the seed stores is derived from APP_SECRET — card and session
+      # tokens are random and stored as plain SHA-256 hashes. It is only read by
+      # QR signing, which the running app recomputes per request with its own
+      # secret. The placeholder therefore cannot produce data the app rejects.
+      - name: Seed
+        if: inputs.action == 'seed' || inputs.action == 'reset-then-seed'
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+          APP_SECRET: ${{ secrets.APP_SECRET || 'seed-only-placeholder-secret-not-used-for-stored-values' }}
+        run: npm run db:seed
