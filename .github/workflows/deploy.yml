@@ -1,0 +1,60 @@
+name: Verify and migrate
+
+# Vercel's Git integration builds and deploys the app itself on every push to
+# main. This workflow owns the two things Vercel does not: proving the commit is
+# sound, and applying database migrations.
+#
+# Migrations are a release step, not a boot step. A serverless function that
+# migrated on cold start would run the migrator from dozens of instances at
+# once; `scripts/migrate.mjs` takes an advisory lock, but the right fix is not
+# to create the race in the first place.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # typecheck, lint, 110 tests, production build.
+      - run: npm run verify
+
+  migrate:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # DIRECT_DATABASE_URL must be a *session-capable* connection — Supabase's
+      # session pooler (:5432), not the transaction pooler (:6543). The migrator
+      # holds a session-scoped advisory lock; a transaction pooler would hand the
+      # session back between statements and drop that lock silently.
+      #
+      # Supabase's direct host (db.<ref>.supabase.co) is IPv6-only and GitHub's
+      # runners are IPv4, so the session pooler is the correct choice here, not a
+      # compromise.
+      - name: Apply migrations
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npm run db:migrate

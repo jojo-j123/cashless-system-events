@@ -1,0 +1,12 @@
+{
+  "build": {
+    "builder": "dockerfile"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "startCommand": "npm run db:migrate && npm run start",
+    "healthcheck": {
+      "command": "wget -qO- http://127.0.0.1:$PORT/api/health"
+    }
+  }
+}
