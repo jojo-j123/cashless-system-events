@@ -24,6 +24,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cashless_test
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -31,6 +32,8 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/cashless_test
     steps:
       - uses: actions/checkout@v4
 
