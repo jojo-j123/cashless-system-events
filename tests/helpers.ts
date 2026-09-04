@@ -1,6 +1,6 @@
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { sql } from 'drizzle-orm';
-import { getDb, type Database } from '../lib/db/client';
+import { getDb, getPool, type Database } from '../lib/db/client';
 import { syncRolesAndPermissions } from '../lib/db/bootstrap';
 import {
   assignStoreStaff,
@@ -32,9 +32,10 @@ let migrated = false;
 export async function prepareDatabase(): Promise<Database> {
   const db = getDb();
   if (!migrated) {
-    await db.execute(sql.raw(`drop schema if exists public cascade`));
-    await db.execute(sql.raw(`drop schema if exists drizzle cascade`));
-    await db.execute(sql.raw(`create schema public`));
+    const pool = getPool();
+    await pool.query(`drop schema if exists public cascade`);
+    await pool.query(`drop schema if exists drizzle cascade`);
+    await pool.query(`create schema public`);
     await migrate(db, { migrationsFolder: './lib/db/migrations' });
     migrated = true;
   }
