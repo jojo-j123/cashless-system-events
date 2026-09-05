@@ -23,7 +23,6 @@ const DESCRIPTIONS: Record<ReaderId, string> = {
   'web-nfc': 'Tap a card against the back of this phone.',
   'keyboard-wedge': 'Use a USB reader that types the card value.',
   simulator: 'Development only. Runs the same server-side checks as a real tap.',
-  'qr-camera': 'Scan a participant QR code with the camera.',
 };
 
 /**

@@ -28,7 +28,6 @@ import {
   normaliseUid,
   type CardCredential,
 } from '../nfc/credentials';
-import { parseQrToken, verifyQrToken } from '../nfc/qr';
 import { getUserAccount } from './ledger';
 
 export type CardStatus = (typeof cardStatus.enumValues)[number];
@@ -247,39 +246,6 @@ async function lookupCard(
       return row ?? null;
     }
 
-    case 'QR': {
-      const parsed = parseQrToken(credential.value);
-      if (!parsed) return null;
-
-      const [holder] = await db
-        .select({ userId: users.id, qrSecret: users.qrSecret })
-        .from(eventParticipants)
-        .innerJoin(users, eq(users.id, eventParticipants.userId))
-        .where(
-          and(
-            eq(eventParticipants.eventId, eventId),
-            eq(eventParticipants.participantRef, parsed.participantRef),
-          ),
-        )
-        .limit(1);
-      if (!holder || !verifyQrToken(parsed, holder.qrSecret)) return null;
-
-      const [row] = await db
-        .select(columns)
-        .from(nfcCards)
-        .where(
-          and(
-            eq(nfcCards.eventId, eventId),
-            eq(nfcCards.assignedUserId, holder.userId),
-            eq(nfcCards.status, 'ACTIVE'),
-          ),
-        )
-        .limit(1);
-      // A participant with no card can still transact by QR: synthesise a
-      // virtual card row so the caller's flow is identical either way.
-      return row ?? virtualCardFor(holder.userId);
-    }
-
     case 'MANUAL_REF': {
       const [row] = await db
         .select(columns)
@@ -296,17 +262,6 @@ async function lookupCard(
       return exhaustive;
     }
   }
-}
-
-/** A QR holder with no physical card still needs a card-shaped result. */
-function virtualCardFor(userId: string): CardRow {
-  return {
-    id: '00000000-0000-0000-0000-000000000000',
-    cardRef: 'QR-ONLY',
-    status: 'ACTIVE',
-    assignedUserId: userId,
-    expiresAt: null,
-  };
 }
 
 async function loadHolder(

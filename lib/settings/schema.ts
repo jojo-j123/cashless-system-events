@@ -44,7 +44,6 @@ export const eventSettingsSchema = z.object({
   /** Reject taps of the same card closer together than this. */
   tapCooldownMs: z.number().int().nonnegative().default(750),
   maxTapsPerCardPerMinute: z.number().int().positive().default(30),
-  qrTokenTtlSeconds: z.number().int().positive().max(3600).default(120),
 
   /* ---- Inventory & balances ---------------------------------------------- */
   lowBalanceThreshold: z.number().int().nonnegative().default(100),
@@ -55,6 +54,15 @@ export const eventSettingsSchema = z.object({
   /* ---- Sessions ---------------------------------------------------------- */
   sessionTimeoutMinutes: z.number().int().positive().max(43_200).default(720),
   posSessionTimeoutMinutes: z.number().int().positive().max(1_440).default(240),
+
+  /* ---- Game mode --------------------------------------------------------- */
+  /**
+   * Off by default, because the leaderboard changes what the event *is*.
+   * With it on, scores and team standings become visible and the game section
+   * appears; with it off this is purely a cashless wallet and none of that
+   * surface exists.
+   */
+  gameModeEnabled: z.boolean().default(false),
 
   /* ---- Leaderboard ------------------------------------------------------- */
   teamRankingMetric: z

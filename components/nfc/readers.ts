@@ -120,9 +120,8 @@ export class KeyboardWedgeReader implements NFCReader {
   }
 }
 
-/** A wedge reader may be configured to send a token, a UID, or a QR payload. */
+/** A wedge reader may be configured to send a token, a UID, or a printed ref. */
 function detectKind(value: string): CardCredential['kind'] {
-  if (value.startsWith('CQ1.')) return 'QR';
   if (/^CARD-\d{4}-\d{6}$/i.test(value)) return 'MANUAL_REF';
   if (/^[0-9a-fA-F:\- ]{8,23}$/.test(value)) return 'UID';
   return 'TOKEN';

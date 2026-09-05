@@ -11,7 +11,7 @@ export const loginSchema = z.object({
 });
 
 export const cardCredentialSchema = z.object({
-  kind: z.enum(['TOKEN', 'UID', 'QR', 'MANUAL_REF']),
+  kind: z.enum(['TOKEN', 'UID', 'MANUAL_REF']),
   value: z.string().min(1).max(512),
   terminalId: uuid.optional(),
   storeId: uuid.optional(),
@@ -103,7 +103,7 @@ export const inventoryAdjustSchema = z.object({
 export const cardBatchSchema = z.object({
   count: z.number().int().min(1).max(5_000),
   technology: z
-    .enum(['NTAG213', 'NTAG215', 'NTAG216', 'MIFARE_CLASSIC', 'DESFIRE_EV2', 'QR_ONLY', 'OTHER'])
+    .enum(['NTAG213', 'NTAG215', 'NTAG216', 'MIFARE_CLASSIC', 'DESFIRE_EV2', 'OTHER'])
     .optional(),
   batchLabel: z.string().max(120).nullish(),
 });

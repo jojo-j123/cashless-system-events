@@ -8,10 +8,9 @@ import { z } from 'zod';
  * - TOKEN      the secret written to the card's NDEF. Preferred.
  * - UID        the chip serial. Readable and clonable by any phone; accepted
  *              only when the event explicitly allows it.
- * - QR         a short-lived signed fallback when NFC is unavailable.
  * - MANUAL_REF a staff member typing the printed card reference. Audited.
  */
-export type CredentialKind = 'TOKEN' | 'UID' | 'QR' | 'MANUAL_REF';
+export type CredentialKind = 'TOKEN' | 'UID' | 'MANUAL_REF';
 
 export interface CardCredential {
   kind: CredentialKind;
@@ -19,7 +18,7 @@ export interface CardCredential {
 }
 
 export const cardCredentialSchema = z.object({
-  kind: z.enum(['TOKEN', 'UID', 'QR', 'MANUAL_REF']),
+  kind: z.enum(['TOKEN', 'UID', 'MANUAL_REF']),
   value: z.string().min(1).max(512),
 });
 
