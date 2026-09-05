@@ -59,7 +59,7 @@ export default async function AdminLayout({
               // Nav is filtered server-side, so a link a user cannot use is
               // never rendered. The real control is in the API, always.
               const visible = section.items.filter((item) =>
-                session.actor.can(item.permission, { eventId: session.eventId }),
+                session.actor.canAnywhere(item.permission, session.eventId),
               );
               if (visible.length === 0) return null;
 

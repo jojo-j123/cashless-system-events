@@ -45,7 +45,7 @@ export async function requireSession(permission?: Permission): Promise<PageSessi
   const actor = await loadActor(db, session.userId, event?.id ?? null);
   if (!actor) redirect('/login');
 
-  if (permission && !actor.can(permission, { eventId: event?.id ?? null })) {
+  if (permission && !actor.canAnywhere(permission, event?.id ?? null)) {
     redirect('/me?denied=1');
   }
 

@@ -72,6 +72,32 @@ describe('cashier boundaries', () => {
     const cashier = await actorFor(world.cashierId);
     expect(cashier.storesFor('pos.operate', world.eventId)).toEqual([world.storeId]);
   });
+
+  it('a store-scoped cashier can still reach the till page', async () => {
+    const cashier = await actorFor(world.cashierId);
+
+    // The regression this guards: page gates asked `can(permission, {eventId})`
+    // with no store in hand. A grant scoped to a store matches neither branch of
+    // that check, so the cashier the till exists for was redirected away from it.
+    expect(cashier.can('pos.operate', { eventId: world.eventId })).toBe(false);
+    expect(cashier.canAnywhere('pos.operate', world.eventId)).toBe(true);
+  });
+
+  it('reaching the page is still not authority over a store', async () => {
+    const cashier = await actorFor(world.cashierId);
+
+    // canAnywhere opens the door; it must not open the till at someone else's
+    // store. That stays with can(), which every API handler calls per request.
+    expect(cashier.canAnywhere('pos.operate', world.eventId)).toBe(true);
+    expect(cashier.can('pos.operate', { eventId: world.eventId, storeId: world.otherStoreId })).toBe(
+      false,
+    );
+  });
+
+  it('does not invent authority a participant never had', async () => {
+    const participant = await actorFor(world.participantId);
+    expect(participant.canAnywhere('pos.operate', world.eventId)).toBe(false);
+  });
 });
 
 describe('role boundaries', () => {
