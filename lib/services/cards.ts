@@ -698,3 +698,94 @@ export async function getCardHistory(
     .orderBy(desc(cardEvents.createdAt))
     .limit(200);
 }
+
+/**
+ * Register a physical tag to a participant by its chip UID.
+ *
+ * The batch flow in `createCards` issues a secret and expects it to be written
+ * to the chip. That is the stronger credential, and it needs a writing step per
+ * card. This is the other shape: tags arrive blank, staff tap one, and the chip
+ * serial it already carries becomes the credential.
+ *
+ * The trade is real and worth stating: a UID is readable and clonable by any
+ * phone, so a copied tag is a copied wallet. It is only honoured at a tap when
+ * the event sets `allowUidOnlyResolution`, which is off by default — enrolling
+ * a tag here does not by itself make it spendable.
+ */
+export async function registerCardForUser(
+  db: Database,
+  input: {
+    eventId: string;
+    userId: string;
+    uid: string;
+    technology?: (typeof nfcCards.$inferInsert)['technology'];
+  },
+  context: AuditContext,
+): Promise<{ cardId: string; cardRef: string }> {
+  const uid = normaliseUid(input.uid);
+  if (!isPlausibleUid(uid)) {
+    throw new ConflictError('That does not look like a card. Tap the tag again.', 'card_uid_invalid');
+  }
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ cardRef: nfcCards.cardRef })
+      .from(nfcCards)
+      .where(and(eq(nfcCards.eventId, input.eventId), eq(nfcCards.uid, uid)))
+      .limit(1);
+    if (existing) {
+      throw new ConflictError(
+        `This tag is already registered as ${existing.cardRef}.`,
+        'card_already_registered',
+      );
+    }
+
+    // Fails if the participant has no wallet in this event, which would leave
+    // a card pointing at an account that cannot hold points.
+    await getUserAccount(tx, input.eventId, input.userId);
+
+    const [cardRef] = await nextRefs(tx, 'card', 1);
+    if (!cardRef) throw new Error('Failed to allocate a card reference');
+
+    const [card] = await tx
+      .insert(nfcCards)
+      .values({
+        eventId: input.eventId,
+        cardRef,
+        uid,
+        // No token: this card is identified by its chip serial, and a hash of
+        // a secret nobody wrote to the chip would be a lie.
+        tokenHash: null,
+        tokenLast4: null,
+        technology: input.technology ?? 'NTAG213',
+        status: 'ACTIVE',
+        assignedUserId: input.userId,
+        assignedAt: new Date(),
+        createdBy: context.actorUserId ?? null,
+      })
+      .returning({ id: nfcCards.id });
+    if (!card) throw new Error('Failed to create the card');
+
+    await writeCardEvent(tx, {
+      eventId: input.eventId,
+      cardId: card.id,
+      action: 'assigned',
+      fromStatus: null,
+      toStatus: 'ACTIVE',
+      userId: input.userId,
+      actorUserId: context.actorUserId ?? null,
+      reason: 'Enrolled by tap',
+    });
+
+    await recordAudit(tx, {
+      ...context,
+      eventId: input.eventId,
+      action: 'card.registered_by_uid',
+      targetType: 'nfc_card',
+      targetId: card.id,
+      after: { cardRef, assignedUserId: input.userId },
+    });
+
+    return { cardId: card.id, cardRef };
+  });
+}

@@ -141,3 +141,15 @@ export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   cursor: z.string().max(500).nullish(),
 });
+
+/**
+ * The desk enrolment: one person, one tag, one opening balance.
+ *
+ * `topUpPoints` may be zero — a card can be handed out empty and loaded later.
+ */
+export const enrolCardSchema = z.object({
+  displayName: z.string().min(2).max(120),
+  teamId: z.string().uuid().nullish(),
+  uid: z.string().min(4).max(64),
+  topUpPoints: z.number().int().nonnegative().max(1_000_000).default(0),
+});
