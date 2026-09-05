@@ -295,3 +295,30 @@ describe('inventory adjustments', () => {
     expect(await stockOf(world, world.burgerId)).toBe(10);
   });
 });
+
+describe('the receipt names who was charged', () => {
+  it('carries the buyer name, not an empty string', async () => {
+    // The till shows this to confirm the right person was charged. It was
+    // populated only for a self purchase, so a cashier saw a balance with no
+    // name against it.
+    await fund(world, world.participantId, 1_000);
+
+    const { receipt } = await checkout(
+      world.db,
+      {
+        eventId: world.eventId,
+        storeId: world.storeId,
+        userId: world.participantId,
+        cardId: null,
+        terminalId: null,
+        cashierUserId: world.cashierId,
+        lines: [{ productId: world.drinkId, quantity: 1 }],
+        notes: null,
+      },
+      `receipt-name-${Math.random()}`,
+      { actorUserId: world.cashierId, requestId: 'test' },
+    );
+
+    expect(receipt.participantName).toBe('Ahmed Hassan');
+  });
+});

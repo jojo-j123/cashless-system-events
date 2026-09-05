@@ -11,6 +11,7 @@ import {
   stores,
   teamMembers,
   terminals,
+  users,
 } from '../db/schema';
 import { recordAudit, type AuditContext } from '../audit';
 import { nextRef } from '../core/refs';
@@ -440,6 +441,15 @@ async function performCheckout(
 
   const settings = await getEventSettings(tx, input.eventId);
 
+  // The cashier is handing goods to a person, and the receipt is where they
+  // confirm they charged the right one. Left blank, a till can show a balance
+  // without saying whose.
+  const [buyer] = await tx
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .limit(1);
+
   return {
     purchaseId: purchase.id,
     purchaseRef,
@@ -448,7 +458,8 @@ async function performCheckout(
     storeId: store.id,
     storeName: store.name,
     userId: input.userId,
-    participantName: context.actorUserId === input.userId ? 'You' : '',
+    participantName:
+      context.actorUserId === input.userId ? 'You' : (buyer?.displayName ?? ''),
     cashierUserId: input.cashierUserId,
     lines: receiptLines,
     subtotalPoints: subtotal,
@@ -541,6 +552,7 @@ export async function getReceipt(
       storeId: purchases.storeId,
       storeName: stores.name,
       userId: purchases.userId,
+      participantName: users.displayName,
       cashierUserId: purchases.cashierUserId,
       subtotalPoints: purchases.subtotalPoints,
       discountPoints: purchases.discountPoints,
@@ -552,6 +564,7 @@ export async function getReceipt(
     })
     .from(purchases)
     .innerJoin(stores, eq(stores.id, purchases.storeId))
+    .innerJoin(users, eq(users.id, purchases.userId))
     .where(and(eq(purchases.id, purchaseId), eq(purchases.eventId, eventId)))
     .limit(1);
 
@@ -570,7 +583,7 @@ export async function getReceipt(
     storeId: purchase.storeId,
     storeName: purchase.storeName,
     userId: purchase.userId,
-    participantName: '',
+    participantName: purchase.participantName,
     cashierUserId: purchase.cashierUserId ?? '',
     lines: items.map((item) => ({
       productId: item.productId,

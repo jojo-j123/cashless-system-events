@@ -58,6 +58,27 @@ export class Actor {
     );
   }
 
+  /**
+   * Holds `permission` somewhere in this event, at any store.
+   *
+   * This is the question a *page* gate is asking. `can` answers a narrower one
+   * — may you act on this exact store — and answering that with no store in
+   * hand fails every store-scoped grant, which locked a cashier assigned to one
+   * store out of the till page entirely.
+   *
+   * It is not a weakening: which store a cashier may actually sell at is still
+   * decided per request, by the API handler, against the store in the body.
+   * Reaching the page is not permission to charge anyone.
+   */
+  canAnywhere(permission: Permission, eventId: string | null): boolean {
+    if (this.isSuperAdmin) return true;
+    return this.grants.some(
+      (grant) =>
+        grant.permission === permission &&
+        (grant.eventId === null || grant.eventId === eventId),
+    );
+  }
+
   canAny(candidates: Permission[], scope: Scope = {}): boolean {
     return candidates.some((permission) => this.can(permission, scope));
   }
