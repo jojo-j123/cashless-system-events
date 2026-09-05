@@ -153,3 +153,23 @@ export const enrolCardSchema = z.object({
   uid: z.string().min(4).max(64),
   topUpPoints: z.number().int().nonnegative().max(1_000_000).default(0),
 });
+
+export const changeCredentialsSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newEmail: z.string().email().max(200).nullish(),
+    newPassword: z.string().min(12).max(200).nullish(),
+  })
+  .refine((value) => Boolean(value.newEmail) || Boolean(value.newPassword), {
+    message: 'Provide a new email address, a new password, or both.',
+  });
+
+export const accountStatusSchema = z.object({
+  userId: z.string().uuid(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'DEACTIVATED']),
+});
+
+/** Typing the phrase is the whole safety mechanism, so it is checked server-side too. */
+export const wipeTenantSchema = z.object({
+  confirm: z.literal('DELETE EVERYTHING'),
+});

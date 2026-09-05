@@ -11,7 +11,13 @@ import { getEventSettings } from '@/lib/settings/service';
  * `gameOnly` entries disappear entirely when the event is not running a game,
  * so an operator running a plain cashless bar never sees a leaderboard.
  */
-const NAV: { href: string; label: string; permission: Permission; gameOnly?: boolean }[] = [
+const NAV: {
+  href: string;
+  label: string;
+  permission: Permission;
+  gameOnly?: boolean;
+  superAdminOnly?: boolean;
+}[] = [
   { href: '/admin', label: 'Dashboard', permission: 'report.read' },
   { href: '/admin/enrol', label: 'Add a card', permission: 'card.write' },
   { href: '/admin/points', label: 'Top-ups', permission: 'wallet.topup' },
@@ -20,6 +26,7 @@ const NAV: { href: string; label: string; permission: Permission; gameOnly?: boo
   { href: '/admin/inventory', label: 'Products', permission: 'inventory.read' },
   { href: '/admin/game', label: 'Game', permission: 'leaderboard.read', gameOnly: true },
   { href: '/admin/audit', label: 'Audit log', permission: 'audit.read' },
+  { href: '/admin/system', label: 'System', permission: 'report.read', superAdminOnly: true },
 ];
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +56,7 @@ export default async function AdminLayout({
             {NAV.filter(
               (item) =>
                 (!item.gameOnly || settings.gameModeEnabled) &&
+                (!item.superAdminOnly || session.actor.isSuperAdmin) &&
                 // Filtered server-side, so a link a user cannot use is never
                 // rendered. The real control is in the API, always.
                 session.actor.can(item.permission, { eventId: session.eventId }),
