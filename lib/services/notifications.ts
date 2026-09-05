@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Executor } from '../db/client';
 import { notifications } from '../db/schema';
 import type { notificationSeverity } from '../db/schema';
@@ -78,7 +78,7 @@ export async function markNotificationsRead(
 ): Promise<number> {
   const conditions = [eq(notifications.userId, userId), isNull(notifications.readAt)];
   if (ids && ids.length > 0) {
-    conditions.push(sql`${notifications.id} = any(${ids})`);
+    conditions.push(inArray(notifications.id, ids));
   }
   const updated = await db
     .update(notifications)

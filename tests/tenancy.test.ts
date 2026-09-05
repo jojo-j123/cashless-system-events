@@ -287,3 +287,34 @@ describe('resetting for a new client', () => {
     expect(rows[0]).toEqual({ accounts: '0', entries: '0', cards: '0' });
   });
 });
+
+describe('who the usage view counts', () => {
+  it('lists staff and leaves plain cardholders out', async () => {
+    // An event has forty attendees per cashier. Listing them all buries the
+    // accounts that can actually sign in and act, which is the whole point.
+    const usage = await getUsageOverview(world.db, world.eventId);
+    const listed = usage.map((row) => row.userId);
+
+    expect(listed).toContain(world.adminId);
+    expect(listed).toContain(world.cashierId);
+    expect(listed).toContain(world.financeId);
+    expect(listed).not.toContain(world.participantId);
+    expect(listed).not.toContain(world.otherParticipantId);
+  });
+
+  it('still lists a cardholder who has been given a way to sign in', async () => {
+    const withLogin = await createParticipant(
+      world.db,
+      {
+        eventId: world.eventId,
+        displayName: 'Signs In',
+        email: `signs-in-${Math.random()}@test.local`,
+        password: 'a-real-password-here',
+      },
+      ctx,
+    );
+
+    const usage = await getUsageOverview(world.db, world.eventId);
+    expect(usage.map((row) => row.userId)).toContain(withLogin.userId);
+  });
+});

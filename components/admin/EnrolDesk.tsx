@@ -186,7 +186,7 @@ export function EnrolDesk({ teams }: { teams: TeamOption[] }): React.ReactElemen
           <Spinner label="Adding the card" />
         </Card>
       ) : nameReady ? (
-        <TapPanel reader={reader} onManualEntry={onTap} busy={false} />
+        <TapPanel reader={reader} onManualEntry={onTap} busy={false} manualKind="UID" />
       ) : (
         <Card className="py-10 text-center text-sm text-ink-500">
           Enter a name, then tap the tag.

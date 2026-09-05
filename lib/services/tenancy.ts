@@ -43,6 +43,7 @@ export async function getUsageOverview(db: Database, eventId: string): Promise<U
       status: users.status,
       isSuperAdmin: users.isSuperAdmin,
       lastLoginAt: users.lastLoginAt,
+      canSignIn: sql<boolean>`${users.passwordHash} is not null`,
     })
     .from(users)
     .innerJoin(eventParticipants, eq(eventParticipants.userId, users.id))
@@ -88,24 +89,32 @@ export async function getUsageOverview(db: Database, eventId: string): Promise<U
     auditRows.filter((row) => row.userId !== null).map((row) => [row.userId as string, row]),
   );
 
-  return staff.map((person) => {
-    const session = sessionsByUser.get(person.userId);
-    const audit = auditByUser.get(person.userId);
-    return {
-      userId: person.userId,
-      displayName: person.displayName,
-      email: person.email,
-      status: person.status as UserStatus,
-      isSuperAdmin: person.isSuperAdmin,
-      roles: (rolesByUser.get(person.userId) ?? []).sort(),
-      lastLoginAt: person.lastLoginAt?.toISOString() ?? null,
-      liveSessions: session?.live ?? 0,
-      lastSeenAt: session?.lastSeenAt?.toISOString() ?? null,
-      lastIp: session?.lastIp ?? null,
-      actions: audit?.actions ?? 0,
-      lastActionAt: audit?.lastActionAt?.toISOString() ?? null,
-    };
-  });
+  return staff
+    .filter((person) => {
+      // "Using this" means holding access to the system, not holding a card.
+      // An event has forty attendees for every cashier, and listing them all
+      // buries the handful of accounts that can actually sign in and act.
+      const held = rolesByUser.get(person.userId) ?? [];
+      return person.canSignIn || held.some((key) => key !== 'PARTICIPANT');
+    })
+    .map((person) => {
+      const session = sessionsByUser.get(person.userId);
+      const audit = auditByUser.get(person.userId);
+      return {
+        userId: person.userId,
+        displayName: person.displayName,
+        email: person.email,
+        status: person.status as UserStatus,
+        isSuperAdmin: person.isSuperAdmin,
+        roles: (rolesByUser.get(person.userId) ?? []).sort(),
+        lastLoginAt: person.lastLoginAt?.toISOString() ?? null,
+        liveSessions: session?.live ?? 0,
+        lastSeenAt: session?.lastSeenAt?.toISOString() ?? null,
+        lastIp: session?.lastIp ?? null,
+        actions: audit?.actions ?? 0,
+        lastActionAt: audit?.lastActionAt?.toISOString() ?? null,
+      };
+    });
 }
 
 /**

@@ -59,7 +59,7 @@ export default async function AdminLayout({
                 (!item.superAdminOnly || session.actor.isSuperAdmin) &&
                 // Filtered server-side, so a link a user cannot use is never
                 // rendered. The real control is in the API, always.
-                session.actor.can(item.permission, { eventId: session.eventId }),
+                session.actor.canAnywhere(item.permission, session.eventId),
             ).map((item) => (
               <Link
                 key={item.href}

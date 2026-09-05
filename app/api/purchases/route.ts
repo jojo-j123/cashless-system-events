@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { route } from '@/lib/api/handler';
 import { created, ok } from '@/lib/api/responses';
 import { checkoutSchema } from '@/lib/api/schemas';
@@ -58,7 +58,7 @@ export const GET = route({ permission: 'purchase.read.any' }, async ({ request, 
   const allowedStores = context.actor.storesFor('purchase.read.any', context.eventId);
   if (allowedStores !== null) {
     if (allowedStores.length === 0) return ok({ data: [] });
-    conditions.push(sql`${purchases.storeId} = any(${allowedStores})`);
+    conditions.push(inArray(purchases.storeId, allowedStores));
   }
 
   const rows = await context.db
