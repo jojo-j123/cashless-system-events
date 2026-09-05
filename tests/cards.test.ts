@@ -11,8 +11,7 @@ import {
   resolveCard,
   unassignCard,
 } from '../lib/services/cards';
-import { cardTaps, eventParticipants, nfcCards, users } from '../lib/db/schema';
-import { issueQrToken } from '../lib/nfc/qr';
+import { cardTaps, nfcCards } from '../lib/db/schema';
 import { fund, balanceOf } from './helpers';
 
 let world: TestWorld;
@@ -145,55 +144,6 @@ describe('card resolution', () => {
       expect(tap.fingerprint).not.toContain(world.cardToken);
       expect(tap.fingerprint).toMatch(/^[0-9a-f]{32}$/);
     }
-  });
-});
-
-describe('QR fallback', () => {
-  it('resolves a signed QR token to the same account as the card', async () => {
-    await fund(world, world.participantId, 800);
-
-    const [participant] = await world.db
-      .select({ ref: eventParticipants.participantRef, secret: users.qrSecret })
-      .from(eventParticipants)
-      .innerJoin(users, eq(users.id, eventParticipants.userId))
-      .where(eq(eventParticipants.userId, world.participantId))
-      .limit(1);
-    if (!participant) throw new Error('participant missing');
-
-    const { token } = issueQrToken(participant.ref, participant.secret, 120);
-    const resolved = await resolveCard(world.db, world.eventId, { kind: 'QR', value: token }, ctx);
-
-    expect(resolved.userId).toBe(world.participantId);
-    expect(resolved.balance).toBe(800);
-  });
-
-  it('rejects an expired QR token', async () => {
-    const [participant] = await world.db
-      .select({ ref: eventParticipants.participantRef, secret: users.qrSecret })
-      .from(eventParticipants)
-      .innerJoin(users, eq(users.id, eventParticipants.userId))
-      .where(eq(eventParticipants.userId, world.participantId))
-      .limit(1);
-    if (!participant) throw new Error('participant missing');
-
-    const { token } = issueQrToken(participant.ref, participant.secret, -10);
-    await expect(
-      resolveCard(world.db, world.eventId, { kind: 'QR', value: token }, ctx),
-    ).rejects.toMatchObject({ code: 'card_not_found' });
-  });
-
-  it('rejects a QR token signed with the wrong secret', async () => {
-    const [participant] = await world.db
-      .select({ ref: eventParticipants.participantRef })
-      .from(eventParticipants)
-      .where(eq(eventParticipants.userId, world.participantId))
-      .limit(1);
-    if (!participant) throw new Error('participant missing');
-
-    const { token } = issueQrToken(participant.ref, 'someone-elses-secret', 120);
-    await expect(
-      resolveCard(world.db, world.eventId, { kind: 'QR', value: token }, ctx),
-    ).rejects.toMatchObject({ code: 'card_not_found' });
   });
 });
 

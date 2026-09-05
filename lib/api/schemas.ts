@@ -11,7 +11,7 @@ export const loginSchema = z.object({
 });
 
 export const cardCredentialSchema = z.object({
-  kind: z.enum(['TOKEN', 'UID', 'QR', 'MANUAL_REF']),
+  kind: z.enum(['TOKEN', 'UID', 'MANUAL_REF']),
   value: z.string().min(1).max(512),
   terminalId: uuid.optional(),
   storeId: uuid.optional(),
@@ -103,7 +103,7 @@ export const inventoryAdjustSchema = z.object({
 export const cardBatchSchema = z.object({
   count: z.number().int().min(1).max(5_000),
   technology: z
-    .enum(['NTAG213', 'NTAG215', 'NTAG216', 'MIFARE_CLASSIC', 'DESFIRE_EV2', 'QR_ONLY', 'OTHER'])
+    .enum(['NTAG213', 'NTAG215', 'NTAG216', 'MIFARE_CLASSIC', 'DESFIRE_EV2', 'OTHER'])
     .optional(),
   batchLabel: z.string().max(120).nullish(),
 });
@@ -140,4 +140,36 @@ export const bulkTopUpSchema = z.object({
 export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   cursor: z.string().max(500).nullish(),
+});
+
+/**
+ * The desk enrolment: one person, one tag, one opening balance.
+ *
+ * `topUpPoints` may be zero — a card can be handed out empty and loaded later.
+ */
+export const enrolCardSchema = z.object({
+  displayName: z.string().min(2).max(120),
+  teamId: z.string().uuid().nullish(),
+  uid: z.string().min(4).max(64),
+  topUpPoints: z.number().int().nonnegative().max(1_000_000).default(0),
+});
+
+export const changeCredentialsSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newEmail: z.string().email().max(200).nullish(),
+    newPassword: z.string().min(12).max(200).nullish(),
+  })
+  .refine((value) => Boolean(value.newEmail) || Boolean(value.newPassword), {
+    message: 'Provide a new email address, a new password, or both.',
+  });
+
+export const accountStatusSchema = z.object({
+  userId: z.string().uuid(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'DEACTIVATED']),
+});
+
+/** Typing the phrase is the whole safety mechanism, so it is checked server-side too. */
+export const wipeTenantSchema = z.object({
+  confirm: z.literal('DELETE EVERYTHING'),
 });

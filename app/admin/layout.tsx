@@ -2,34 +2,31 @@ import Link from 'next/link';
 import { requireSession } from '@/lib/auth/server';
 import { Badge } from '@/components/ui/primitives';
 import type { Permission } from '@/lib/authz/permissions';
+import { getEventSettings } from '@/lib/settings/service';
 
-const NAV: { group: string; items: { href: string; label: string; permission: Permission }[] }[] = [
-  {
-    group: 'Overview',
-    items: [
-      { href: '/admin', label: 'Dashboard', permission: 'report.read' },
-      { href: '/admin/ops', label: 'Live operations', permission: 'ops.dashboard' },
-    ],
-  },
-  {
-    group: 'People',
-    items: [
-      { href: '/admin/participants', label: 'Participants', permission: 'participant.read.any' },
-      { href: '/admin/cards', label: 'NFC cards', permission: 'card.read' },
-    ],
-  },
-  {
-    group: 'Money',
-    items: [{ href: '/admin/points', label: 'Points & top-ups', permission: 'wallet.topup' }],
-  },
-  {
-    group: 'Commerce',
-    items: [{ href: '/admin/inventory', label: 'Inventory', permission: 'inventory.read' }],
-  },
-  {
-    group: 'Governance',
-    items: [{ href: '/admin/audit', label: 'Audit log', permission: 'audit.read' }],
-  },
+/**
+ * One flat list, in the order the desk actually uses it.
+ *
+ * Grouping five links under five headings was more chrome than navigation.
+ * `gameOnly` entries disappear entirely when the event is not running a game,
+ * so an operator running a plain cashless bar never sees a leaderboard.
+ */
+const NAV: {
+  href: string;
+  label: string;
+  permission: Permission;
+  gameOnly?: boolean;
+  superAdminOnly?: boolean;
+}[] = [
+  { href: '/admin', label: 'Dashboard', permission: 'report.read' },
+  { href: '/admin/enrol', label: 'Add a card', permission: 'card.write' },
+  { href: '/admin/points', label: 'Top-ups', permission: 'wallet.topup' },
+  { href: '/admin/participants', label: 'People', permission: 'participant.read.any' },
+  { href: '/admin/cards', label: 'Cards', permission: 'card.read' },
+  { href: '/admin/inventory', label: 'Products', permission: 'inventory.read' },
+  { href: '/admin/game', label: 'Game', permission: 'leaderboard.read', gameOnly: true },
+  { href: '/admin/audit', label: 'Audit log', permission: 'audit.read' },
+  { href: '/admin/system', label: 'System', permission: 'report.read', superAdminOnly: true },
 ];
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +37,7 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }): Promise<React.ReactElement> {
   const session = await requireSession('report.read');
+  const settings = await getEventSettings(session.db, session.eventId);
 
   return (
     <div className="min-h-screen bg-ink-100">
@@ -54,35 +52,23 @@ export default async function AdminLayout({
             </p>
           </div>
 
-          <nav className="space-y-4 p-4">
-            {NAV.map((section) => {
-              // Nav is filtered server-side, so a link a user cannot use is
-              // never rendered. The real control is in the API, always.
-              const visible = section.items.filter((item) =>
+          <nav className="space-y-0.5 p-4">
+            {NAV.filter(
+              (item) =>
+                (!item.gameOnly || settings.gameModeEnabled) &&
+                (!item.superAdminOnly || session.actor.isSuperAdmin) &&
+                // Filtered server-side, so a link a user cannot use is never
+                // rendered. The real control is in the API, always.
                 session.actor.canAnywhere(item.permission, session.eventId),
-              );
-              if (visible.length === 0) return null;
-
-              return (
-                <div key={section.group}>
-                  <p className="px-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
-                    {section.group}
-                  </p>
-                  <ul className="mt-1 space-y-0.5">
-                    {visible.map((item) => (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          className="block rounded-lg px-2 py-1.5 text-sm font-medium text-ink-700 hover:bg-ink-100"
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
+            ).map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="block rounded-lg px-2 py-2 text-sm font-medium text-ink-700 hover:bg-ink-100"
+              >
+                {item.label}
+              </Link>
+            ))}
           </nav>
 
           <div className="border-t border-ink-200 p-4">

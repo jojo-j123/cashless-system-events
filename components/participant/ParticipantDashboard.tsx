@@ -1,9 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import type { WalletSummary } from '@/lib/services/wallet';
-import { Alert, Badge, Button, Card, Points } from '@/components/ui/primitives';
-import { QrCredential } from './QrCredential';
+import { Alert, Badge, Card, Points } from '@/components/ui/primitives';
 
 interface LedgerRow {
   entryId: string;
@@ -62,7 +60,6 @@ export function ParticipantDashboard({
   lowBalanceThreshold: number;
   transfersEnabled: boolean;
 }): React.ReactElement {
-  const [showQr, setShowQr] = useState(false);
 
   return (
     <div className="min-h-screen bg-ink-100 pb-16">
@@ -101,17 +98,6 @@ export function ParticipantDashboard({
             </div>
           </div>
 
-          <div className="mt-5 flex gap-2">
-            <Button fullWidth size="lg" onClick={() => setShowQr((current) => !current)}>
-              {showQr ? 'Hide code' : 'Show my code'}
-            </Button>
-          </div>
-
-          {showQr ? (
-            <div className="mt-4">
-              <QrCredential />
-            </div>
-          ) : null}
         </Card>
 
         <div className="grid gap-4 sm:grid-cols-2">

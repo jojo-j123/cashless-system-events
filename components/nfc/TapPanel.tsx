@@ -16,11 +16,19 @@ export function TapPanel({
   reader,
   onManualEntry,
   busy,
+  manualKind = 'MANUAL_REF',
 }: {
   reader: CardReaderState;
   onManualEntry: (credential: CardCredential) => void;
   busy: boolean;
+  /**
+   * What a typed value means here. A till looks a card up by the reference
+   * printed on it; the enrolment desk is registering a chip that has no
+   * reference yet, so what gets typed there is the serial.
+   */
+  manualKind?: CardCredential['kind'];
 }): React.ReactElement {
+  const isUid = manualKind === 'UID';
   const [manualValue, setManualValue] = useState('');
   const [showManual, setShowManual] = useState(false);
 
@@ -88,20 +96,20 @@ export function TapPanel({
             event.preventDefault();
             const value = manualValue.trim();
             if (value.length === 0) return;
-            onManualEntry({ kind: 'MANUAL_REF', value });
+            onManualEntry({ kind: manualKind, value });
             setManualValue('');
           }}
         >
           <input
             value={manualValue}
             onChange={(event) => setManualValue(event.target.value)}
-            placeholder="CARD-2026-000123"
-            aria-label="Card reference"
+            placeholder={isUid ? '04A1B2C3D4E5F6' : 'CARD-2026-000123'}
+            aria-label={isUid ? 'Chip serial' : 'Card reference'}
             className="flex-1 rounded-xl border border-ink-300 px-4 py-3 text-base
               focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
           />
           <Button type="submit" tone="neutral">
-            Look up
+            {isUid ? 'Use' : 'Look up'}
           </Button>
         </form>
       ) : (
@@ -110,7 +118,7 @@ export function TapPanel({
           onClick={() => setShowManual(true)}
           className="text-sm font-medium text-brand-600 underline-offset-2 hover:underline"
         >
-          Enter a card reference instead
+          {isUid ? 'Type the chip serial instead' : 'Enter a card reference instead'}
         </button>
       )}
     </Card>

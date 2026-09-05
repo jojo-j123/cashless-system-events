@@ -21,7 +21,7 @@ export interface NFCReader {
   start(handlers: ReaderHandlers): Promise<() => void>;
 }
 
-export type ReaderId = 'web-nfc' | 'keyboard-wedge' | 'simulator' | 'qr-camera';
+export type ReaderId = 'web-nfc' | 'keyboard-wedge' | 'simulator';
 
 export interface ReaderHandlers {
   onCredential: (credential: CardCredential) => void;

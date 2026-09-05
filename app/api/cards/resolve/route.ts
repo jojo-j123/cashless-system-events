@@ -6,8 +6,8 @@ import { RATE_LIMITS } from '@/lib/core/rate-limit';
 
 /**
  * The tap endpoint. Every reader — Web NFC, USB keyboard-wedge, the
- * development simulator, QR fallback — lands here with the same shape, and
- * goes through identical server-side validation.
+ * development simulator — lands here with the same shape, and goes through
+ * identical server-side validation.
  */
 export const POST = route(
   {
