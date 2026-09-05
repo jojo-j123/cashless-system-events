@@ -2,7 +2,13 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeDb } from '../lib/db/client';
 import { buildWorld, prepareDatabase, type TestWorld } from './helpers';
 import { loadActor, type Actor } from '../lib/authz/actor';
-import { ALL_PERMISSIONS, ROLE_PERMISSIONS, type Permission } from '../lib/authz/permissions';
+import {
+  ALL_PERMISSIONS,
+  ROLE_KEYS,
+  ROLE_PERMISSIONS,
+  STAFF_ROLE_KEYS,
+  type Permission,
+} from '../lib/authz/permissions';
 import { hashPassword, hashPin, needsRehash, verifyPassword, verifyPin } from '../lib/auth/password';
 
 let world: TestWorld;
@@ -131,13 +137,21 @@ describe('role boundaries', () => {
     ).toThrow(/permission/i);
   });
 
-  it('a finance manager can issue points but cannot change product prices', async () => {
+  it('money operations belong to an admin, not to a tier below one', async () => {
+    // There is no finance role any more: whoever runs the points desk is an
+    // admin, so they carry product and stock authority too. The line that
+    // still holds is the one below — a cashier gets none of it.
     const finance = await actorFor(world.financeId);
     expect(finance.can('wallet.topup', { eventId: world.eventId })).toBe(true);
     expect(finance.can('wallet.adjust', { eventId: world.eventId })).toBe(true);
     expect(finance.can('approval.decide', { eventId: world.eventId })).toBe(true);
-    expect(finance.can('product.write', { eventId: world.eventId })).toBe(false);
     expect(finance.can('role.manage', { eventId: world.eventId })).toBe(false);
+
+    const cashier = await actorFor(world.cashierId);
+    expect(cashier.can('wallet.topup', { eventId: world.eventId })).toBe(false);
+    expect(cashier.can('wallet.adjust', { eventId: world.eventId })).toBe(false);
+    expect(cashier.can('approval.decide', { eventId: world.eventId })).toBe(false);
+    expect(cashier.can('product.write', { eventId: world.eventId })).toBe(false);
   });
 
   it('an admin cannot grant roles — that is reserved for a super admin', async () => {
@@ -175,12 +189,28 @@ describe('permission catalogue', () => {
     expect(holders).toEqual(['SUPER_ADMIN']);
   });
 
-  it('no role below finance can create points', () => {
+  it('only an admin can create points', () => {
     const creators = Object.entries(ROLE_PERMISSIONS)
       .filter(([, granted]) => granted.includes('wallet.topup'))
       .map(([role]) => role)
       .sort();
-    expect(creators).toEqual(['ADMIN', 'FINANCE_MANAGER', 'SUPER_ADMIN']);
+    expect(creators).toEqual(['ADMIN', 'SUPER_ADMIN']);
+  });
+
+  it('a cashier can take money but never create or reprice it', () => {
+    const cashier = ROLE_PERMISSIONS.CASHIER;
+    expect(cashier).toContain('pos.operate');
+    expect(cashier).not.toContain('wallet.topup');
+    expect(cashier).not.toContain('wallet.adjust');
+    expect(cashier).not.toContain('product.write');
+    expect(cashier).not.toContain('inventory.adjust');
+  });
+
+  it('offers exactly three staff roles', () => {
+    expect([...STAFF_ROLE_KEYS]).toEqual(['SUPER_ADMIN', 'ADMIN', 'CASHIER']);
+    // PARTICIPANT is in the catalogue but is not a job anyone is hired into.
+    expect(STAFF_ROLE_KEYS).not.toContain('PARTICIPANT');
+    expect([...ROLE_KEYS].sort()).toEqual(['ADMIN', 'CASHIER', 'PARTICIPANT', 'SUPER_ADMIN']);
   });
 });
 

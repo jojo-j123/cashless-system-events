@@ -1,6 +1,6 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from './client';
-import { permissions, rolePermissions, roles } from './schema';
+import { permissions, rolePermissions, roles, userRoles } from './schema';
 import {
   PERMISSIONS,
   ROLE_DESCRIPTIONS,
@@ -70,6 +70,42 @@ export async function syncRolesAndPermissions(db: Executor): Promise<void> {
       await db.insert(rolePermissions).values(grants).onConflictDoNothing();
     }
   }
+
+  await retireRolesLeftOutOfTheCatalogue(db);
+}
+
+/**
+ * Drop roles the catalogue no longer defines.
+ *
+ * Without this, removing a role from `ROLE_KEYS` only stops it being synced:
+ * the row and its permission grants stay behind, frozen at whatever they held
+ * on the day it was removed, and anyone still holding it keeps that access
+ * indefinitely. That is the same reasoning as the permission replace above.
+ *
+ * Roles still granted to somebody are left alone — `user_roles.role_id` is ON
+ * DELETE RESTRICT, and a deploy is not the place to revoke a working login.
+ * Migration 0003 is what carries grants off a retired role; this only sweeps
+ * up after it.
+ */
+async function retireRolesLeftOutOfTheCatalogue(db: Executor): Promise<void> {
+  const retired = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(notInArray(roles.key, [...ROLE_KEYS]));
+  if (retired.length === 0) return;
+
+  const ids = retired.map((role) => role.id);
+  const stillHeld = await db
+    .select({ roleId: userRoles.roleId })
+    .from(userRoles)
+    .where(inArray(userRoles.roleId, ids));
+
+  const held = new Set(stillHeld.map((row) => row.roleId));
+  const removable = ids.filter((id) => !held.has(id));
+  if (removable.length === 0) return;
+
+  await db.delete(rolePermissions).where(inArray(rolePermissions.roleId, removable));
+  await db.delete(roles).where(inArray(roles.id, removable));
 }
 
 function toTitle(key: string): string {
