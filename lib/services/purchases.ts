@@ -442,8 +442,8 @@ async function performCheckout(
   const settings = await getEventSettings(tx, input.eventId);
 
   // The cashier is handing goods to a person, and the receipt is where they
-  // confirm they charged the right one. Leaving this blank made the till say
-  // a balance without saying whose.
+  // confirm they charged the right one. Left blank, a till can show a balance
+  // without saying whose.
   const [buyer] = await tx
     .select({ displayName: users.displayName })
     .from(users)
