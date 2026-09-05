@@ -62,7 +62,7 @@ An event is created in one of two modes:
 | Mode | What it is |
 | --- | --- |
 | **Normal event** | A cashless event: wallets, top-ups and tills. No teams, no scores. |
-| **Game** | Everything a normal event has, plus teams, standings and scoring. |
+| **Game** | Everything a normal event has, plus teams, standings, challenges and scoring. |
 
 This is deliberately **not** two products. The wallet, the till, the ledger and
 the cards are identical either way; game mode only ever *adds* a surface on top
@@ -76,6 +76,14 @@ settings rather than stored beside them: two copies of one fact can disagree,
 and this one decides what participants can see. Modes are per event, not per
 deployment — one instance runs a gamified away-day and a plain cashless
 festival at the same time.
+
+**Challenges** are how a game issues points: do a thing, earn points and score.
+Setting the reward (`challenge.write`) and marking one complete
+(`challenge.award`) are separate permissions, and neither is a cashier's — a
+challenge is a way to create points, so it sits on the admin side of the same
+line as a top-up. Awarding is a money endpoint: idempotent, double-entry, and
+guarded by a unique index so a one-shot challenge cannot pay twice however many
+staff mark it complete at once.
 
 ## The three surfaces
 

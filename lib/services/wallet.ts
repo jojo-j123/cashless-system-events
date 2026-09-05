@@ -3,7 +3,6 @@ import type { Database, Executor, Transaction } from '../db/client';
 import {
   accounts,
   approvalRequests,
-  events,
   ledgerEntries,
   ledgerTransactions,
   teamMembers,
@@ -20,13 +19,13 @@ import { getEventSettings } from '../settings/service';
 import {
   ApprovalRequiredError,
   ConflictError,
-  EventNotOperationalError,
   FeatureDisabledError,
   LimitExceededError,
   NotFoundError,
   ValidationError,
 } from '../errors';
 import {
+  assertEventAcceptsPoints,
   getSystemAccount,
   getTeamAccount,
   getUserAccount,
@@ -948,15 +947,3 @@ function assertReason(reason: string, minLength = 3): void {
   }
 }
 
-/** Points cannot be issued once an event has ended or been archived. */
-async function assertEventAcceptsPoints(db: Executor, eventId: string): Promise<void> {
-  const [event] = await db
-    .select({ status: events.status })
-    .from(events)
-    .where(eq(events.id, eventId))
-    .limit(1);
-  if (!event) throw new NotFoundError('That event');
-  if (event.status === 'ENDED' || event.status === 'ARCHIVED') {
-    throw new EventNotOperationalError(event.status, 'issuing points');
-  }
-}
