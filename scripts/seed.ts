@@ -91,10 +91,13 @@ async function main(): Promise<void> {
     email: 'admin@example.com',
     roleKey: 'ADMIN',
   });
+  // Money operations — top-ups, adjustments, approvals — are admin work; there
+  // is no separate finance role. She is a second admin who happens to run the
+  // points desk.
   const finance = await createStaff(db, eventId, {
-    displayName: 'Layla Finance',
+    displayName: 'Layla Admin',
     email: 'finance@example.com',
-    roleKey: 'FINANCE_MANAGER',
+    roleKey: 'ADMIN',
   });
   const staffContext = { actorUserId: admin, requestId: 'seed' };
   const financeContext = { actorUserId: finance, requestId: 'seed' };
@@ -131,8 +134,10 @@ async function main(): Promise<void> {
   if (participants.length === 0) throw new Error('Seed produced no participants');
 
   console.log('→ Creating stores and products');
+  // Named on every store's roster, which grants the cashier role at each. Stock
+  // and pricing are admin work, so he is not given more than a till.
   const storeManager = await createStaff(db, eventId, {
-    displayName: 'Karim Storemanager',
+    displayName: 'Karim Store Lead',
     email: 'storemanager@example.com',
     roleKey: 'PARTICIPANT',
   });
@@ -386,8 +391,8 @@ async function main(): Promise<void> {
   console.log('\nSign in with any of these — password is the same for all:');
   console.log(`  superadmin@example.com   Super Admin        ${DEMO_PASSWORD}`);
   console.log(`  admin@example.com        Admin              ${DEMO_PASSWORD}`);
-  console.log(`  finance@example.com      Finance Manager    ${DEMO_PASSWORD}`);
-  console.log(`  storemanager@example.com Store Manager      ${DEMO_PASSWORD}`);
+  console.log(`  finance@example.com      Admin (points)     ${DEMO_PASSWORD}`);
+  console.log(`  storemanager@example.com Cashier (all stores) ${DEMO_PASSWORD}`);
   console.log(`  cashier.food-court@example.com  Cashier (PIN 4821)  ${DEMO_PASSWORD}`);
   console.log(`  participant1@example.com Participant        ${DEMO_PASSWORD}`);
   await closeDb();

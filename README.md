@@ -41,10 +41,14 @@ Open http://localhost:3000. Every seeded account uses the password
 | --- | --- | --- |
 | `superadmin@example.com` | Super Admin | Admin dashboard |
 | `admin@example.com` | Admin | Admin dashboard |
-| `finance@example.com` | Finance Manager | Points & top-ups |
-| `storemanager@example.com` | Store Manager | Admin dashboard |
+| `finance@example.com` | Admin (runs the points desk) | Points & top-ups |
+| `storemanager@example.com` | Cashier (every store) | POS |
 | `cashier.food-court@example.com` | Cashier (PIN 4821) | POS |
 | `participant1@example.com` | Participant | Wallet |
+
+There are three staff roles, and deliberately no tier between them: you own the
+system (**super admin**), you run the event (**admin**), or you work a till
+(**cashier**). Participant is not a job — every attendee holds it on enrolment.
 
 No NFC hardware? The POS ships a development simulator behind
 `NEXT_PUBLIC_ENABLE_NFC_SIMULATOR`. It is **not** a bypass: it produces a real

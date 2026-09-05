@@ -386,7 +386,7 @@ export async function createStore(
         .onConflictDoNothing();
       await grantRole(tx, {
         userId: input.managerUserId,
-        roleKey: 'STORE_MANAGER',
+        roleKey: 'CASHIER',
         eventId: input.eventId,
         storeId: store.id,
       });
@@ -426,9 +426,13 @@ export async function assignStoreStaff(
 
     // The role grant is scoped to this store: authority here is not authority
     // at the store next door.
+    //
+    // MANAGER and CASHIER both grant the cashier role. The distinction is a
+    // roster label — who is in charge of this store's shift — and no longer
+    // carries permissions of its own; editing products or stock is admin work.
     await grantRole(tx, {
       userId: input.userId,
-      roleKey: input.role === 'MANAGER' ? 'STORE_MANAGER' : 'CASHIER',
+      roleKey: 'CASHIER',
       eventId: input.eventId,
       storeId: input.storeId,
       grantedBy: context.actorUserId ?? null,

@@ -121,7 +121,7 @@ export async function buildWorld(
       eventId,
       displayName: 'Finance User',
       email: 'finance@test.local',
-      roleKey: 'FINANCE_MANAGER',
+      roleKey: 'ADMIN',
     },
     SYSTEM_CONTEXT,
   );

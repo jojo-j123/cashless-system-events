@@ -82,17 +82,21 @@ export type { Scope } from './actor';
 
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
 
-export const ROLE_KEYS = [
-  'SUPER_ADMIN',
-  'ADMIN',
-  'FINANCE_MANAGER',
-  'STORE_MANAGER',
-  'CASHIER',
-  'TEAM_MANAGER',
-  'PARTICIPANT',
-] as const;
+export const ROLE_KEYS = ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'PARTICIPANT'] as const;
 
 export type RoleKey = (typeof ROLE_KEYS)[number];
+
+/**
+ * The roles a person can be given as a job. PARTICIPANT is excluded because it
+ * is not a job: every attendee holds it from the moment they are enrolled.
+ *
+ * There is deliberately no tier between admin and cashier. Someone either runs
+ * the event or works a till; a middle tier existed once and only ever produced
+ * arguments about which of the two it was closer to.
+ */
+export const STAFF_ROLE_KEYS = ['SUPER_ADMIN', 'ADMIN', 'CASHIER'] as const;
+
+export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
 const PARTICIPANT_PERMISSIONS: Permission[] = [
   'participant.read.self',
@@ -124,42 +128,6 @@ const CASHIER_PERMISSIONS: Permission[] = [
   'inventory.read',
 ];
 
-const STORE_MANAGER_PERMISSIONS: Permission[] = [
-  ...CASHIER_PERMISSIONS,
-  'product.write',
-  'inventory.adjust',
-  'store.staff.manage',
-  'report.read',
-  'report.export',
-  'terminal.read',
-  'purchase.refund.approve',
-];
-
-const TEAM_MANAGER_PERMISSIONS: Permission[] = [
-  ...PARTICIPANT_PERMISSIONS,
-  'participant.read.any',
-  'team.allocate',
-  'report.read',
-];
-
-const FINANCE_MANAGER_PERMISSIONS: Permission[] = [
-  ...PARTICIPANT_PERMISSIONS,
-  'participant.read.any',
-  'wallet.read.any',
-  'wallet.topup',
-  'wallet.adjust',
-  'team.allocate',
-  'ledger.read',
-  'ledger.export',
-  'report.read',
-  'report.export',
-  'audit.read',
-  'purchase.read.any',
-  'purchase.refund',
-  'purchase.refund.approve',
-  'approval.decide',
-];
-
 const ADMIN_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter(
   (permission) => permission !== 'role.manage',
 );
@@ -167,28 +135,19 @@ const ADMIN_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter(
 export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   ADMIN: ADMIN_PERMISSIONS,
-  FINANCE_MANAGER: unique(FINANCE_MANAGER_PERMISSIONS),
-  STORE_MANAGER: unique(STORE_MANAGER_PERMISSIONS),
   CASHIER: unique(CASHIER_PERMISSIONS),
-  TEAM_MANAGER: unique(TEAM_MANAGER_PERMISSIONS),
   PARTICIPANT: unique(PARTICIPANT_PERMISSIONS),
 };
 
 export const ROLE_DESCRIPTIONS: Record<RoleKey, string> = {
-  SUPER_ADMIN: 'Unrestricted access, including granting roles.',
-  ADMIN: 'Runs the event: users, teams, cards, stores, points, reports.',
-  FINANCE_MANAGER: 'Owns points: top-ups, adjustments, the ledger and approvals.',
-  STORE_MANAGER: 'Runs one store: products, stock, staff and store reports.',
-  CASHIER: 'Operates a POS terminal: checkout and permitted refunds.',
-  TEAM_MANAGER: 'Views their team and allocates team rewards where authorised.',
+  SUPER_ADMIN: 'Owns the system: everything an admin can do, plus granting roles.',
+  ADMIN: 'Runs the event: users, teams, cards, stores, points, approvals, reports.',
+  CASHIER: 'Works a till: checkout, card lookups and permitted refunds.',
   PARTICIPANT: 'An event attendee: balance, purchases, team and rewards.',
 };
 
 /** Roles whose grants are meaningful only in the context of one store. */
-export const STORE_SCOPED_ROLES: ReadonlySet<RoleKey> = new Set<RoleKey>([
-  'CASHIER',
-  'STORE_MANAGER',
-]);
+export const STORE_SCOPED_ROLES: ReadonlySet<RoleKey> = new Set<RoleKey>(['CASHIER']);
 
 function unique(permissions: Permission[]): Permission[] {
   return [...new Set(permissions)];
