@@ -17,6 +17,7 @@ import { assignCard, createCards } from '../lib/services/cards';
 import { allocateToTeam, topUpUser } from '../lib/services/wallet';
 import { checkout } from '../lib/services/purchases';
 import { refundPurchase } from '../lib/services/refunds';
+import { awardChallenge, createChallenge, setChallengeStatus } from '../lib/services/challenges';
 import { verifyLedgerIntegrity } from '../lib/services/ledger';
 import { users } from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -62,6 +63,8 @@ async function main(): Promise<void> {
       timezone: 'Africa/Cairo',
       startsAt: new Date('2026-07-01T09:00:00Z'),
       endsAt: new Date('2026-07-04T23:00:00Z'),
+      // The demo event has teams, standings and challenges, so it is a game.
+      mode: 'GAME',
       settings: {
         lowBalanceThreshold: 150,
         maxSingleTopUp: 20_000,
@@ -371,6 +374,46 @@ async function main(): Promise<void> {
       },
       `seed-refund-${firstPurchaseId}`,
       financeContext,
+    );
+  }
+
+  console.log('→ Creating challenges');
+  const CHALLENGE_DEFS = [
+    { name: 'Find the hidden flag', points: 250, score: 100, max: 1 },
+    { name: 'Complete the scavenger hunt', points: 500, score: 200, max: 1 },
+    { name: 'Win a round at the arcade', points: 100, score: 50, max: 3 },
+    // Score only: it moves the leaderboard without minting spendable points.
+    { name: 'Cheer for your team', points: 0, score: 25, max: 5 },
+  ];
+
+  const challengeIds: string[] = [];
+  for (const definition of CHALLENGE_DEFS) {
+    const { challengeId } = await createChallenge(
+      db,
+      {
+        eventId,
+        name: definition.name,
+        slug: definition.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        rewardPoints: definition.points,
+        rewardScorePoints: definition.score,
+        maxCompletionsPerUser: definition.max,
+      },
+      staffContext,
+    );
+    await setChallengeStatus(db, { eventId, challengeId, status: 'ACTIVE' }, staffContext);
+    challengeIds.push(challengeId);
+  }
+
+  // Award a spread of them so both leaderboards have something to rank on the
+  // first load, rather than showing an empty board on a freshly seeded demo.
+  for (const [index, participant] of participants.slice(0, 18).entries()) {
+    const challengeId = challengeIds[index % challengeIds.length];
+    if (!challengeId) continue;
+    await awardChallenge(
+      db,
+      { eventId, challengeId, userId: participant.userId, awardedBy: admin },
+      `seed-challenge-${challengeId}-${participant.userId}`,
+      staffContext,
     );
   }
 

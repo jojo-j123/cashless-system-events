@@ -180,3 +180,27 @@ export const setAccountCredentialsSchema = z.object({
   newEmail: z.string().email().max(200).nullish(),
   newPassword: z.string().min(12).max(200).nullish(),
 });
+
+export const challengeCreateSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase words separated by hyphens.')
+    .max(100),
+  description: z.string().trim().max(2000).nullish(),
+  // Zero is allowed on either side but not both — a challenge can pay only
+  // score, or only spendable points. The service refuses the both-zero case.
+  rewardPoints: z.number().int().min(0),
+  rewardScorePoints: z.number().int().min(0).optional(),
+  maxCompletionsPerUser: z.number().int().min(1).optional(),
+  startsAt: z.coerce.date().nullish(),
+  endsAt: z.coerce.date().nullish(),
+});
+
+export const challengeStatusSchema = z.object({
+  status: z.enum(['DRAFT', 'ACTIVE', 'ENDED']),
+});
+
+export const challengeAwardSchema = z.object({ userId: uuid });

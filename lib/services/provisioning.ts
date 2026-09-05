@@ -24,6 +24,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../errors';
 import { provisionTeamAccounts, provisionUserAccounts } from './ledger';
 import { updateEventSettings } from '../settings/service';
 import type { EventSettingsPatch } from '../settings/schema';
+import { EVENT_MODE_PRESETS, type EventMode } from '../settings/modes';
 
 /**
  * Create an event and its system accounts.
@@ -41,6 +42,8 @@ export async function createEvent(
     timezone?: string;
     startsAt?: Date | null;
     endsAt?: Date | null;
+    /** Which product this event is. Defaults to a plain cashless event. */
+    mode?: EventMode;
     settings?: EventSettingsPatch;
   },
   context: AuditContext,
@@ -78,8 +81,14 @@ export async function createEvent(
       },
     ]);
 
-    if (input.settings) {
-      await updateEventSettings(tx, event.id, input.settings, context.actorUserId ?? null);
+    // The mode sets its knobs first so an explicitly passed setting still wins:
+    // choosing GAME and then turning one thing off must not be overruled here.
+    const settings: EventSettingsPatch = {
+      ...(input.mode ? EVENT_MODE_PRESETS[input.mode] : {}),
+      ...input.settings,
+    };
+    if (Object.keys(settings).length > 0) {
+      await updateEventSettings(tx, event.id, settings, context.actorUserId ?? null);
     }
 
     await recordAudit(tx, {

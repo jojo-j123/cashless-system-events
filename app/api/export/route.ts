@@ -13,16 +13,28 @@ import {
   users,
 } from '@/lib/db/schema';
 import { listStock } from '@/lib/services/inventory';
-import { getSalesByStore, getTeamLeaderboard, toCsv } from '@/lib/services/reports';
-import { ValidationError } from '@/lib/errors';
+import {
+  EXPORT_DATASETS,
+  GAME_ONLY_EXPORT_DATASETS,
+  getSalesByStore,
+  getTeamLeaderboard,
+  toCsv,
+  type ExportDataset,
+} from '@/lib/services/reports';
+import { NotFoundError, ValidationError } from '@/lib/errors';
+import { getEventSettings } from '@/lib/settings/service';
 
-const DATASETS = ['transactions', 'purchases', 'participants', 'inventory', 'teams', 'sales'] as const;
-type Dataset = (typeof DATASETS)[number];
+type Dataset = ExportDataset;
 
 export const GET = route({ permission: 'report.export' }, async ({ request, context }) => {
   const dataset = new URL(request.url).searchParams.get('dataset') as Dataset | null;
-  if (!dataset || !DATASETS.includes(dataset)) {
-    throw new ValidationError(`dataset must be one of: ${DATASETS.join(', ')}`);
+  if (!dataset || !EXPORT_DATASETS.includes(dataset)) {
+    throw new ValidationError(`dataset must be one of: ${EXPORT_DATASETS.join(', ')}`);
+  }
+
+  if (GAME_ONLY_EXPORT_DATASETS.includes(dataset)) {
+    const settings = await getEventSettings(context.db, context.eventId);
+    if (!settings.gameModeEnabled) throw new NotFoundError(`A ${dataset} export for this event`);
   }
 
   const rows = await loadDataset(context.db, context.eventId, dataset);

@@ -189,12 +189,32 @@ describe('permission catalogue', () => {
     expect(holders).toEqual(['SUPER_ADMIN']);
   });
 
-  it('only an admin can create points', () => {
-    const creators = Object.entries(ROLE_PERMISSIONS)
-      .filter(([, granted]) => granted.includes('wallet.topup'))
-      .map(([role]) => role)
-      .sort();
-    expect(creators).toEqual(['ADMIN', 'SUPER_ADMIN']);
+  it('only an admin can create points, by any route', () => {
+    // Every permission that can bring points into existence. A new one added
+    // here without thought would show up as a failure rather than as a cashier
+    // quietly gaining the ability to mint.
+    const MINTING: Permission[] = [
+      'wallet.topup',
+      'wallet.adjust',
+      'team.allocate',
+      'challenge.award',
+    ];
+
+    for (const permission of MINTING) {
+      const creators = Object.entries(ROLE_PERMISSIONS)
+        .filter(([, granted]) => granted.includes(permission))
+        .map(([role]) => role)
+        .sort();
+      expect(creators, `${permission} is granted too widely`).toEqual(['ADMIN', 'SUPER_ADMIN']);
+    }
+  });
+
+  it('a cashier can read challenges but never award one', () => {
+    // Reading is what the till and the wallet need; awarding is minting.
+    expect(ROLE_PERMISSIONS.CASHIER).toContain('challenge.read');
+    expect(ROLE_PERMISSIONS.CASHIER).not.toContain('challenge.award');
+    expect(ROLE_PERMISSIONS.CASHIER).not.toContain('challenge.write');
+    expect(ROLE_PERMISSIONS.PARTICIPANT).not.toContain('challenge.award');
   });
 
   it('a cashier can take money but never create or reprice it', () => {

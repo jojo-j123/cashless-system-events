@@ -81,4 +81,23 @@ export async function closeDb(): Promise<void> {
   }
 }
 
+/**
+ * Whether an error is a Postgres unique-constraint violation (SQLSTATE 23505).
+ *
+ * The driver's error is not what reaches the caller: the query builder wraps it
+ * and hangs the original off `cause`, so a check against the outermost error
+ * alone silently never matches and a race surfaces as a raw database failure
+ * instead of the conflict it is. Walking the chain is what makes
+ * insert-and-catch usable as a concurrency guard.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  for (let current: unknown = error, depth = 0; current != null && depth < 8; depth += 1) {
+    if (typeof current === 'object' && (current as { code?: unknown }).code === '23505') {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 export { schema };
