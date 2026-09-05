@@ -173,3 +173,10 @@ export const accountStatusSchema = z.object({
 export const wipeTenantSchema = z.object({
   confirm: z.literal('DELETE EVERYTHING'),
 });
+
+/** A super admin setting someone else's sign-in details. */
+export const setAccountCredentialsSchema = z.object({
+  userId: z.string().uuid(),
+  newEmail: z.string().email().max(200).nullish(),
+  newPassword: z.string().min(12).max(200).nullish(),
+});

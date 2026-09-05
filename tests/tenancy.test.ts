@@ -5,6 +5,7 @@ import { buildWorld, prepareDatabase, type TestWorld } from './helpers';
 import {
   changeOwnCredentials,
   getUsageOverview,
+  setAccountCredentials,
   setUserStatus,
   wipeTenantData,
 } from '../lib/services/tenancy';
@@ -316,5 +317,117 @@ describe('who the usage view counts', () => {
 
     const usage = await getUsageOverview(world.db, world.eventId);
     expect(usage.map((row) => row.userId)).toContain(withLogin.userId);
+  });
+});
+
+describe('setting someone else’s login', () => {
+  it('sets a password the account can actually sign in with', async () => {
+    await setAccountCredentials(
+      world.db,
+      { targetUserId: world.cashierId, actorUserId: world.adminId, newPassword: 'handed-over-password' },
+      ctx,
+    );
+
+    const [account] = await world.db
+      .select({ hash: users.passwordHash })
+      .from(users)
+      .where(eq(users.id, world.cashierId))
+      .limit(1);
+
+    expect(await verifyPassword('handed-over-password', account?.hash ?? '')).toBe(true);
+  });
+
+  it('signs the account out, so the old login stops working', async () => {
+    await openSession(world.cashierId);
+    expect(await liveSessionCount(world.cashierId)).toBe(1);
+
+    await setAccountCredentials(
+      world.db,
+      { targetUserId: world.cashierId, actorUserId: world.adminId, newPassword: 'handed-over-password' },
+      ctx,
+    );
+
+    // New details beside a still-working old login would defeat the point.
+    expect(await liveSessionCount(world.cashierId)).toBe(0);
+  });
+
+  it('changes the email address', async () => {
+    const address = `new-cashier-${Math.random()}@test.local`;
+    await setAccountCredentials(
+      world.db,
+      { targetUserId: world.cashierId, actorUserId: world.adminId, newEmail: address.toUpperCase() },
+      ctx,
+    );
+
+    const [account] = await world.db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, world.cashierId))
+      .limit(1);
+    expect(account?.email).toBe(address.toLowerCase());
+  });
+
+  it('refuses to touch another super admin', async () => {
+    await world.db.update(users).set({ isSuperAdmin: true }).where(eq(users.id, world.financeId));
+
+    await expect(
+      setAccountCredentials(
+        world.db,
+        { targetUserId: world.financeId, actorUserId: world.adminId, newPassword: 'not-your-account' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+  });
+
+  it('sends you to the self-service panel for your own account', async () => {
+    await expect(
+      setAccountCredentials(
+        world.db,
+        { targetUserId: world.adminId, actorUserId: world.adminId, newPassword: 'my-own-password' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('refuses a password short enough to guess', async () => {
+    await expect(
+      setAccountCredentials(
+        world.db,
+        { targetUserId: world.cashierId, actorUserId: world.adminId, newPassword: 'short' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: 'validation_failed' });
+  });
+
+  it('refuses an email another live account already uses', async () => {
+    const [taken] = await world.db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, world.financeId))
+      .limit(1);
+
+    await expect(
+      setAccountCredentials(
+        world.db,
+        { targetUserId: world.cashierId, actorUserId: world.adminId, newEmail: taken?.email ?? '' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('records that it happened without recording the secret', async () => {
+    await setAccountCredentials(
+      world.db,
+      { targetUserId: world.cashierId, actorUserId: world.adminId, newPassword: 'handed-over-password' },
+      ctx,
+    );
+
+    const rows = await world.db
+      .select({ after: auditLogs.afterState })
+      .from(auditLogs)
+      .where(eq(auditLogs.action, 'account.credentials_set'));
+
+    expect(rows.length).toBe(1);
+    expect(JSON.stringify(rows[0]?.after)).not.toContain('handed-over-password');
   });
 });

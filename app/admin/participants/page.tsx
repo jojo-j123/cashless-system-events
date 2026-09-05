@@ -67,10 +67,10 @@ export default async function ParticipantsPage(): Promise<React.ReactElement> {
                 <tr>
                   <th className="px-4 py-2">Participant</th>
                   <th className="px-4 py-2">Team</th>
-                  <th className="px-4 py-2">Card</th>
+                  <th className="hidden px-4 py-2 sm:table-cell">Card</th>
                   <th className="px-4 py-2 text-right">Balance</th>
-                  <th className="px-4 py-2 text-right">Earned</th>
-                  <th className="px-4 py-2 text-right">Spent</th>
+                  <th className="hidden px-4 py-2 text-right sm:table-cell">Earned</th>
+                  <th className="hidden px-4 py-2 text-right sm:table-cell">Spent</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-200">
@@ -97,16 +97,16 @@ export default async function ParticipantsPage(): Promise<React.ReactElement> {
                         <span className="text-ink-400">—</span>
                       )}
                     </td>
-                    <td className="tabular px-4 py-3 text-xs">
+                    <td className="tabular hidden px-4 py-3 text-xs sm:table-cell">
                       {row.cardRef ?? <Badge tone="warn">No card</Badge>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Points value={row.balance} />
                     </td>
-                    <td className="tabular px-4 py-3 text-right text-ink-500">
+                    <td className="tabular hidden px-4 py-3 text-right text-ink-500 sm:table-cell">
                       {row.lifetimeEarned.toLocaleString()}
                     </td>
-                    <td className="tabular px-4 py-3 text-right text-ink-500">
+                    <td className="tabular hidden px-4 py-3 text-right text-ink-500 sm:table-cell">
                       {row.lifetimeSpent.toLocaleString()}
                     </td>
                   </tr>
