@@ -8,6 +8,7 @@ import { ApiError, api, newIdempotencyKey, submitWithRetry } from '@/lib/client/
 import { useCardReader } from '@/components/nfc/useCardReader';
 import { TapPanel } from '@/components/nfc/TapPanel';
 import { Alert, Button, Card, EmptyState, Points, Spinner } from '@/components/ui/primitives';
+import { SignOutButton } from '@/components/auth/SignOutButton';
 
 interface Product {
   id: string;
@@ -189,11 +190,15 @@ export function PosTerminal({
           ) : (
             <p className="text-sm font-bold text-ink-900">{store?.name ?? 'No store'}</p>
           )}
-          {lines.length > 0 ? (
-            <Button size="sm" tone="neutral" onClick={() => setBasket({})}>
-              Clear
-            </Button>
-          ) : null}
+          <span className="flex items-center gap-2">
+            {lines.length > 0 ? (
+              <Button size="sm" tone="neutral" onClick={() => setBasket({})}>
+                Clear
+              </Button>
+            ) : null}
+            {/* Shift change happens at the counter, so the way out lives here. */}
+            <SignOutButton confirmWhen={lines.length > 0} />
+          </span>
         </div>
       </header>
 

@@ -2,6 +2,7 @@
 
 import type { WalletSummary } from '@/lib/services/wallet';
 import { Alert, Badge, Card, Points } from '@/components/ui/primitives';
+import { SignOutButton } from '@/components/auth/SignOutButton';
 
 interface LedgerRow {
   entryId: string;
@@ -64,10 +65,14 @@ export function ParticipantDashboard({
   return (
     <div className="min-h-screen bg-ink-100 pb-16">
       <header className="bg-ink-900 px-4 pb-16 pt-8 text-white">
-        <div className="mx-auto max-w-lg">
-          <p className="text-sm text-ink-400">{eventName}</p>
-          <h1 className="mt-1 text-xl font-bold">{displayName}</h1>
-          <p className="tabular text-xs text-ink-400">{participantRef}</p>
+        <div className="mx-auto flex max-w-lg items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-ink-400">{eventName}</p>
+            <h1 className="mt-1 truncate text-xl font-bold">{displayName}</h1>
+            <p className="tabular text-xs text-ink-400">{participantRef}</p>
+          </div>
+          {/* Staff sign in here too, and a shared phone must not stay signed in. */}
+          <SignOutButton />
         </div>
       </header>
 
