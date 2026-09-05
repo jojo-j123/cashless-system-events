@@ -249,7 +249,7 @@ export function CardManager({
                   <th className="px-4 py-2">Card</th>
                   <th className="px-4 py-2">Holder</th>
                   <th className="px-4 py-2">Status</th>
-                  <th className="px-4 py-2">Last used</th>
+                  <th className="hidden px-4 py-2 sm:table-cell">Last used</th>
                   <th className="px-4 py-2 text-right">Actions</th>
                 </tr>
               </thead>
@@ -273,7 +273,7 @@ export function CardManager({
                     <td className="px-4 py-3">
                       <Badge tone={STATUS_TONE[card.status] ?? 'neutral'}>{card.status}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-xs text-ink-500">
+                    <td className="hidden px-4 py-3 text-xs text-ink-500 sm:table-cell">
                       {card.lastUsedAt ? new Date(card.lastUsedAt).toLocaleString() : 'never'}
                     </td>
                     <td className="px-4 py-3">

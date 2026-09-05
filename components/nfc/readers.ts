@@ -80,6 +80,16 @@ function extractToken(event: NdefReadingEvent): string | null {
  * typing the value and pressing Enter. Nothing to install, works on any
  * desktop or tablet with a USB port.
  */
+/**
+ * A USB wedge reader types the card number and presses Enter, character by
+ * character, far faster than a person can. That speed is the only reliable
+ * way to tell a scan from someone filling in a form — the reader is an
+ * ordinary keyboard as far as the browser is concerned, and the operator's
+ * hands are usually still in the name field when they present the card.
+ */
+const MACHINE_GAP_MS = 50;
+const MIN_SCAN_LENGTH = 4;
+
 export class KeyboardWedgeReader implements NFCReader {
   readonly id = 'keyboard-wedge' as const;
   readonly label = 'USB card reader';
@@ -91,33 +101,77 @@ export class KeyboardWedgeReader implements NFCReader {
   async start(handlers: ReaderHandlers): Promise<() => void> {
     let buffer = '';
     let lastKeyAt = 0;
+    let fastKeys = 0;
+    let borrowed: { element: HTMLInputElement; value: string } | null = null;
+
+    const reset = (): void => {
+      buffer = '';
+      fastKeys = 0;
+      borrowed = null;
+    };
 
     const onKeyDown = (event: KeyboardEvent): void => {
-      const target = event.target as HTMLElement | null;
-      // Never swallow what someone is deliberately typing into a field.
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-
       const now = Date.now();
-      // A human cannot type this fast; a gap means a new scan started.
-      if (now - lastKeyAt > 120) buffer = '';
+      const gap = now - lastKeyAt;
       lastKeyAt = now;
 
       if (event.key === 'Enter') {
         const value = buffer.trim();
-        buffer = '';
-        if (value.length >= 4) {
-          handlers.onCredential({ kind: detectKind(value), value });
-        }
+        // A scan is a burst: nearly every character arrived faster than a
+        // person can type. A human pressing Enter in a form is not.
+        const scanned = value.length >= MIN_SCAN_LENGTH && fastKeys >= value.length - 1;
+        const stolenFrom = borrowed;
+        reset();
+
+        if (!scanned) return;
+
+        event.preventDefault();
+        // The reader typed into whatever field had focus. Put that field back
+        // exactly as the operator left it — through the native setter, so a
+        // React-controlled input updates its state rather than silently
+        // disagreeing with the DOM.
+        if (stolenFrom) restoreValue(stolenFrom.element, stolenFrom.value);
+
+        handlers.onCredential({ kind: detectKind(value), value });
         return;
       }
 
-      if (event.key.length === 1) buffer += event.key;
+      if (event.key.length !== 1) return;
+
+      // A character only continues the current sequence if it arrived at
+      // machine speed. Anything slower starts a new one — including the first
+      // character of a scan, which follows whatever the operator last typed.
+      if (gap < MACHINE_GAP_MS && buffer.length > 0) {
+        fastKeys += 1;
+      } else {
+        reset();
+        // Snapshot the field as it stands before this character, in case the
+        // sequence turns out to be a card. keydown runs before the value
+        // changes, so this is the operator's own text, without the scan.
+        const target = event.target;
+        if (target instanceof HTMLInputElement) {
+          borrowed = { element: target, value: target.value };
+        }
+      }
+
+      buffer += event.key;
     };
 
     document.addEventListener('keydown', onKeyDown);
     handlers.onReady?.();
     return () => document.removeEventListener('keydown', onKeyDown);
   }
+}
+
+/**
+ * Write a value into an input the way a user would, not the way JavaScript
+ * does. React tracks the last value it set; assigning `.value` directly leaves
+ * its state stale, so the field would snap back the next time it rendered.
+ */
+function restoreValue(element: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 /** A wedge reader may be configured to send a token, a UID, or a printed ref. */

@@ -141,6 +141,7 @@ function Usage({ rows }: { rows: UserUsage[] }): React.ReactElement {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Record<string, UserUsage['status']>>({});
+  const [openLogin, setOpenLogin] = useState<string | null>(null);
 
   const change = useCallback(async (userId: string, status: UserUsage['status']) => {
     setPending(userId);
@@ -157,7 +158,9 @@ function Usage({ rows }: { rows: UserUsage[] }): React.ReactElement {
 
   return (
     <section>
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-ink-500">Who is using this</h2>
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-ink-500">
+        Who is using this
+      </h2>
       {error ? (
         <div className="mb-2">
           <Alert tone="danger" title="Not changed">
@@ -165,75 +168,195 @@ function Usage({ rows }: { rows: UserUsage[] }): React.ReactElement {
           </Alert>
         </div>
       ) : null}
-      <Card padded={false}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-sm">
-            <thead className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
-              <tr>
-                <th className="px-4 py-2">Person</th>
-                <th className="px-4 py-2">Roles</th>
-                <th className="px-4 py-2">Last sign-in</th>
-                <th className="px-4 py-2">Live</th>
-                <th className="px-4 py-2">From</th>
-                <th className="px-4 py-2">Actions</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-100">
-              {rows.map((person) => {
-                const status = statuses[person.userId] ?? person.status;
-                return (
-                  <tr key={person.userId}>
-                    <td className="px-4 py-2">
-                      <span className="block font-semibold text-ink-900">{person.displayName}</span>
-                      <span className="block text-xs text-ink-500">{person.email ?? 'no email'}</span>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-ink-600">
-                      {person.roles.join(', ') || '—'}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-ink-600">{when(person.lastLoginAt)}</td>
-                    <td className="px-4 py-2">
-                      {person.liveSessions > 0 ? (
-                        <Badge tone="success">{person.liveSessions}</Badge>
-                      ) : (
-                        <span className="text-xs text-ink-400">—</span>
-                      )}
-                    </td>
-                    <td className="tabular px-4 py-2 text-xs text-ink-600">
-                      {person.lastIp ?? '—'}
-                    </td>
-                    <td className="tabular px-4 py-2 text-xs text-ink-600">{person.actions}</td>
-                    <td className="px-4 py-2 text-right">
-                      {person.isSuperAdmin ? (
-                        <Badge tone="brand">super admin</Badge>
-                      ) : status === 'ACTIVE' ? (
-                        <Button
-                          size="sm"
-                          tone="danger"
-                          disabled={pending === person.userId}
-                          onClick={() => void change(person.userId, 'SUSPENDED')}
-                        >
-                          Suspend
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          tone="neutral"
-                          disabled={pending === person.userId}
-                          onClick={() => void change(person.userId, 'ACTIVE')}
-                        >
-                          Restore
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+
+      {/* A list rather than a table: the same rows have to be readable on the
+          phone at the registration desk, and a seven-column table there is a
+          horizontal scrollbar with the important part off-screen. */}
+      <div className="space-y-2">
+        {rows.map((person) => {
+          const status = statuses[person.userId] ?? person.status;
+          const isOpen = openLogin === person.userId;
+
+          return (
+            <Card key={person.userId} className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink-900">
+                    {person.displayName}{' '}
+                    {person.isSuperAdmin ? <Badge tone="brand">super admin</Badge> : null}
+                    {status !== 'ACTIVE' ? <Badge tone="danger">{status.toLowerCase()}</Badge> : null}
+                  </p>
+                  <p className="truncate text-sm text-ink-500">{person.email ?? 'no email'}</p>
+                  <p className="mt-1 text-xs text-ink-500">{person.roles.join(', ') || 'no roles'}</p>
+                </div>
+                {person.liveSessions > 0 ? (
+                  <Badge tone="success">{person.liveSessions} signed in</Badge>
+                ) : null}
+              </div>
+
+              <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div>
+                  <dt className="text-ink-500">Last sign-in</dt>
+                  <dd className="text-ink-800">{when(person.lastLoginAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-500">From</dt>
+                  <dd className="tabular text-ink-800">{person.lastIp ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-500">Actions</dt>
+                  <dd className="tabular text-ink-800">{person.actions}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-500">Last action</dt>
+                  <dd className="text-ink-800">{when(person.lastActionAt)}</dd>
+                </div>
+              </dl>
+
+              {person.isSuperAdmin ? null : (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    tone="neutral"
+                    onClick={() => setOpenLogin(isOpen ? null : person.userId)}
+                  >
+                    {isOpen ? 'Cancel' : 'Set login'}
+                  </Button>
+                  {status === 'ACTIVE' ? (
+                    <Button
+                      size="sm"
+                      tone="danger"
+                      disabled={pending === person.userId}
+                      onClick={() => void change(person.userId, 'SUSPENDED')}
+                    >
+                      Suspend
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      tone="neutral"
+                      disabled={pending === person.userId}
+                      onClick={() => void change(person.userId, 'ACTIVE')}
+                    >
+                      Restore
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {isOpen ? (
+                <SetLogin person={person} onDone={() => setOpenLogin(null)} />
+              ) : null}
+            </Card>
+          );
+        })}
+      </div>
     </section>
+  );
+}
+
+/**
+ * Hand someone a login.
+ *
+ * Nobody can produce a staff member's current password on their behalf, so
+ * this is authorised by being the owner rather than by proving who they are.
+ * Setting a password ends their sessions, or new details would sit alongside
+ * an old login that still worked.
+ */
+function SetLogin({
+  person,
+  onDone,
+}: {
+  person: UserUsage;
+  onDone: () => void;
+}): React.ReactElement {
+  const [email, setEmail] = useState(person.email ?? '');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const emailChanged = email.trim().toLowerCase() !== (person.email ?? '').toLowerCase();
+
+  const submit = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/api/admin/accounts/credentials', {
+        method: 'POST',
+        body: {
+          userId: person.userId,
+          newEmail: emailChanged ? email.trim() : null,
+          newPassword: password || null,
+        },
+      });
+      setSaved(true);
+      setPassword('');
+    } catch (failure) {
+      setError(failure instanceof ApiError ? failure.message : 'Could not set those details.');
+    } finally {
+      setBusy(false);
+    }
+  }, [email, emailChanged, password, person.userId]);
+
+  return (
+    <div className="space-y-3 rounded-xl bg-ink-50 p-3">
+      {error ? (
+        <Alert tone="danger" title="Not saved">
+          {error}
+        </Alert>
+      ) : null}
+      {saved ? (
+        <Alert tone="success" title="Saved">
+          {password ? 'Their other sessions were signed out.' : 'Email updated.'}
+        </Alert>
+      ) : null}
+
+      <div>
+        <label htmlFor={`email-${person.userId}`} className="block text-sm font-medium text-ink-700">
+          Email
+        </label>
+        <input
+          id={`email-${person.userId}`}
+          type="email"
+          autoComplete="off"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className="mt-1 w-full rounded-xl border border-ink-300 px-4 py-2.5"
+        />
+      </div>
+      <div>
+        <label
+          htmlFor={`password-${person.userId}`}
+          className="block text-sm font-medium text-ink-700"
+        >
+          New password <span className="text-ink-400">(optional, 12+ characters)</span>
+        </label>
+        <input
+          id={`password-${person.userId}`}
+          type="text"
+          autoComplete="off"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          className="mt-1 w-full rounded-xl border border-ink-300 px-4 py-2.5"
+          // Shown rather than masked: whoever types it here has to read it back
+          // to the person it belongs to.
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={busy || (!emailChanged && !password)}
+          onClick={() => void submit()}
+        >
+          {busy ? 'Saving' : 'Save'}
+        </Button>
+        <Button size="sm" tone="neutral" onClick={onDone}>
+          Close
+        </Button>
+      </div>
+    </div>
   );
 }
 

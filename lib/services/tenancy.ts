@@ -321,3 +321,96 @@ export async function getRecentActivity(
 
   return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
 }
+
+/**
+ * Set another account's sign-in details.
+ *
+ * Distinct from `changeOwnCredentials`, which proves who you are with your
+ * current password. Nobody can produce a staff member's password on their
+ * behalf, so this is authorised by being the super admin instead — and is
+ * therefore restricted to that, and refuses to touch another super admin so
+ * one owner cannot quietly take another's account.
+ *
+ * Changing someone's password ends their sessions. Handing a cashier new
+ * details while their old login keeps working would defeat the point of
+ * changing them.
+ */
+export async function setAccountCredentials(
+  db: Database,
+  input: {
+    targetUserId: string;
+    actorUserId: string;
+    newEmail?: string | null;
+    newPassword?: string | null;
+  },
+  context: AuditContext,
+): Promise<{ userId: string; email: string | null }> {
+  if (!input.newEmail && !input.newPassword) {
+    throw new ValidationError('Provide a new email address, a new password, or both.');
+  }
+  if (input.targetUserId === input.actorUserId) {
+    throw new ConflictError('Change your own details in the panel above, with your password.');
+  }
+
+  const email = input.newEmail?.trim().toLowerCase() || null;
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new ValidationError('That does not look like an email address.');
+  }
+  if (input.newPassword && input.newPassword.length < 12) {
+    throw new ValidationError('Use at least 12 characters for the new password.');
+  }
+
+  return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ email: users.email, isSuperAdmin: users.isSuperAdmin })
+      .from(users)
+      .where(and(eq(users.id, input.targetUserId), isNull(users.deletedAt)))
+      .limit(1);
+    if (!target) throw new ConflictError('That account no longer exists.');
+    if (target.isSuperAdmin) {
+      throw new ForbiddenError('A super admin account can only change its own sign-in details.');
+    }
+
+    if (email && email !== target.email) {
+      const [clash] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          and(
+            sql`lower(${users.email}) = ${email}`,
+            ne(users.id, input.targetUserId),
+            isNull(users.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (clash) throw new ConflictError('Another account already uses that email address.');
+    }
+
+    await tx
+      .update(users)
+      .set({
+        ...(email ? { email } : {}),
+        ...(input.newPassword ? { passwordHash: await hashPassword(input.newPassword) } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, input.targetUserId));
+
+    if (input.newPassword) {
+      await tx
+        .update(sessions)
+        .set({ revokedAt: new Date(), revokedReason: 'credentials changed by an administrator' })
+        .where(and(eq(sessions.userId, input.targetUserId), isNull(sessions.revokedAt)));
+    }
+
+    await recordAudit(tx, {
+      ...context,
+      action: 'account.credentials_set',
+      targetType: 'user',
+      targetId: input.targetUserId,
+      // Which fields moved, never their values.
+      after: { emailChanged: Boolean(email && email !== target.email), passwordChanged: Boolean(input.newPassword) },
+    });
+
+    return { userId: input.targetUserId, email: email ?? target.email };
+  });
+}

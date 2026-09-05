@@ -62,8 +62,8 @@ export default async function AuditPage(): Promise<React.ReactElement> {
                   <th className="px-4 py-2">When</th>
                   <th className="px-4 py-2">Action</th>
                   <th className="px-4 py-2">Actor</th>
-                  <th className="px-4 py-2">Target</th>
-                  <th className="px-4 py-2">Detail</th>
+                  <th className="hidden px-4 py-2 lg:table-cell">Target</th>
+                  <th className="hidden px-4 py-2 lg:table-cell">Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-200">
@@ -81,8 +81,8 @@ export default async function AuditPage(): Promise<React.ReactElement> {
                       <p className="text-ink-800">{row.actorName ?? 'system'}</p>
                       <p className="text-xs text-ink-400">{row.actorRole ?? ''}</p>
                     </td>
-                    <td className="px-4 py-2 text-xs text-ink-500">{row.targetType ?? '—'}</td>
-                    <td className="max-w-md px-4 py-2 text-xs text-ink-500">
+                    <td className="hidden px-4 py-2 text-xs text-ink-500 lg:table-cell">{row.targetType ?? '—'}</td>
+                    <td className="hidden max-w-md px-4 py-2 text-xs text-ink-500 lg:table-cell">
                       <code className="break-all">
                         {JSON.stringify(row.metadata ?? {}).slice(0, 160)}
                       </code>

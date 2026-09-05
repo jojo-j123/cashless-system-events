@@ -102,9 +102,9 @@ export function InventoryManager({
               <thead className="bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
                   <th className="px-4 py-2">Product</th>
-                  <th className="px-4 py-2">Store</th>
+                  <th className="hidden px-4 py-2 sm:table-cell">Store</th>
                   <th className="px-4 py-2 text-right">On hand</th>
-                  <th className="px-4 py-2">Status</th>
+                  <th className="hidden px-4 py-2 sm:table-cell">Status</th>
                   {canAdjust ? <th className="px-4 py-2 text-right">Adjust</th> : null}
                 </tr>
               </thead>
@@ -115,11 +115,11 @@ export function InventoryManager({
                       <p className="font-medium text-ink-900">{row.productName}</p>
                       <p className="tabular text-xs text-ink-400">{row.sku}</p>
                     </td>
-                    <td className="px-4 py-3 text-ink-600">{row.storeName}</td>
+                    <td className="hidden px-4 py-3 text-ink-600 sm:table-cell">{row.storeName}</td>
                     <td className="tabular px-4 py-3 text-right font-semibold">
                       {row.trackInventory ? row.quantityOnHand.toLocaleString() : '∞'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden px-4 py-3 sm:table-cell">
                       {!row.trackInventory ? (
                         <Badge>Not tracked</Badge>
                       ) : row.quantityOnHand === 0 ? (
