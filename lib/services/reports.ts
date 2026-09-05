@@ -476,3 +476,23 @@ export function toCsv(rows: Record<string, unknown>[]): string {
     ...rows.map((row) => headers.map((header) => escape(row[header])).join(',')),
   ].join('\n');
 }
+
+/**
+ * The CSV datasets an operator can export.
+ *
+ * Listed here rather than in the route so the dashboard can offer exactly the
+ * set the route will honour, instead of the two drifting apart.
+ */
+export const EXPORT_DATASETS = [
+  'transactions',
+  'purchases',
+  'participants',
+  'inventory',
+  'teams',
+  'sales',
+] as const;
+
+export type ExportDataset = (typeof EXPORT_DATASETS)[number];
+
+/** Datasets that only mean anything when the event is running a game. */
+export const GAME_ONLY_EXPORT_DATASETS: readonly ExportDataset[] = ['teams'];

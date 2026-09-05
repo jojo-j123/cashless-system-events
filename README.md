@@ -55,6 +55,28 @@ No NFC hardware? The POS ships a development simulator behind
 credential and goes through the same server-side authorisation, card-status and
 wallet logic as a physical tap.
 
+## Two kinds of event
+
+An event is created in one of two modes:
+
+| Mode | What it is |
+| --- | --- |
+| **Normal event** | A cashless event: wallets, top-ups and tills. No teams, no scores. |
+| **Game** | Everything a normal event has, plus teams, standings and scoring. |
+
+This is deliberately **not** two products. The wallet, the till, the ledger and
+the cards are identical either way; game mode only ever *adds* a surface on top
+of the same spine. Two codepaths would mean every feature shipped from here on
+has to answer "but does it work in the other mode?" — a question you pay for at
+every event, forever.
+
+So a mode is a named preset over settings that already exist
+(`lib/settings/modes.ts`), and the mode an event is in is derived from those
+settings rather than stored beside them: two copies of one fact can disagree,
+and this one decides what participants can see. Modes are per event, not per
+deployment — one instance runs a gamified away-day and a plain cashless
+festival at the same time.
+
 ## The three surfaces
 
 | Surface | Route | Built for |
