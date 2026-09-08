@@ -16,6 +16,7 @@ import {
   challengeStatus,
   idempotencyStatus,
   notificationSeverity,
+  rewardRedemptionStatus,
   rewardType,
 } from './enums';
 import { events, users } from './identity';
@@ -228,5 +229,64 @@ export const rewards = pgTable(
   (t) => [
     index('rewards_event_idx').on(t.eventId, t.isActive),
     check('rewards_cost_non_negative', sql`${t.costPoints} >= 0`),
+  ],
+);
+
+/**
+ * One row per reward claimed.
+ *
+ * `costPoints` is copied from the reward rather than read back through it: an
+ * operator repricing or retiring a reward next week must not rewrite what
+ * somebody was charged for it today.
+ *
+ * Deletes are blocked by trigger. A redemption moved points, so a mistake is
+ * corrected by cancelling it — which writes a reversal and restores stock —
+ * never by removing the record.
+ */
+export const rewardRedemptions = pgTable(
+  'reward_redemptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    rewardId: uuid('reward_id')
+      .notNull()
+      .references(() => rewards.id, { onDelete: 'restrict' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    costPoints: bigint('cost_points', { mode: 'number' }).notNull(),
+    status: rewardRedemptionStatus('status').notNull().default('CLAIMED'),
+    ledgerTransactionId: uuid('ledger_transaction_id').references(() => ledgerTransactions.id, {
+      onDelete: 'restrict',
+    }),
+    reversalTransactionId: uuid('reversal_transaction_id').references(
+      () => ledgerTransactions.id,
+      { onDelete: 'restrict' },
+    ),
+    fulfilledBy: uuid('fulfilled_by').references(() => users.id, { onDelete: 'set null' }),
+    fulfilledAt: timestamp('fulfilled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id, { onDelete: 'set null' }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('reward_redemptions_event_time_idx').on(t.eventId, t.createdAt),
+    index('reward_redemptions_user_time_idx').on(t.userId, t.createdAt),
+    index('reward_redemptions_reward_idx').on(t.rewardId),
+    index('reward_redemptions_open_idx')
+      .on(t.eventId, t.createdAt)
+      .where(sql`${t.status} = 'CLAIMED'`),
+    check('reward_redemptions_cost_non_negative', sql`${t.costPoints} >= 0`),
+    check(
+      'reward_redemptions_cancel_consistent',
+      sql`(${t.status} = 'CANCELLED') = (${t.cancelledAt} is not null)`,
+    ),
+    check(
+      'reward_redemptions_fulfil_consistent',
+      sql`(${t.status} = 'FULFILLED') = (${t.fulfilledAt} is not null)`,
+    ),
   ],
 );

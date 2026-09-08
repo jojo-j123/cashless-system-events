@@ -85,6 +85,17 @@ line as a top-up. Awarding is a money endpoint: idempotent, double-entry, and
 guarded by a unique index so a one-shot challenge cannot pay twice however many
 staff mark it complete at once.
 
+**Rewards** are the other direction: spend points on something that is not a
+till purchase — a queue skip, a backstage photo, a hoodie off the shelf. They
+are deliberately **not** a game feature and work in either mode, because
+challenges *create* points while rewards only spend them.
+
+Redeeming takes the points immediately and leaves a claim waiting at the desk
+until it is handed over; cancelling writes a compensating reversal and puts both
+the reward's stock and any real product stock back. The points go to
+forfeiture rather than a store's revenue account, so a redemption never inflates
+the sales figures an operator settles against.
+
 ## The three surfaces
 
 | Surface | Route | Built for |

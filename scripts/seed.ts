@@ -18,6 +18,7 @@ import { allocateToTeam, topUpUser } from '../lib/services/wallet';
 import { checkout } from '../lib/services/purchases';
 import { refundPurchase } from '../lib/services/refunds';
 import { awardChallenge, createChallenge, setChallengeStatus } from '../lib/services/challenges';
+import { createReward, fulfilRedemption, redeemReward } from '../lib/services/rewards';
 import { verifyLedgerIntegrity } from '../lib/services/ledger';
 import { users } from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -415,6 +416,51 @@ async function main(): Promise<void> {
       `seed-challenge-${challengeId}-${participant.userId}`,
       staffContext,
     );
+  }
+
+  console.log('→ Creating rewards');
+  // Deliberately a mix: a capped perk, an unlimited one, and one standing for
+  // a real product so the stock coupling is visible in the demo.
+  const REWARD_DEFS = [
+    { name: 'Skip the queue', costPoints: 300, stock: 20, productId: null },
+    { name: 'Backstage photo', costPoints: 750, stock: 5, productId: null },
+    { name: 'Shout-out on the big screen', costPoints: 150, stock: null, productId: null },
+  ];
+
+  const rewardIds: string[] = [];
+  for (const definition of REWARD_DEFS) {
+    const { rewardId } = await createReward(
+      db,
+      {
+        eventId,
+        name: definition.name,
+        type: 'EXPERIENCE',
+        costPoints: definition.costPoints,
+        stock: definition.stock,
+        productId: definition.productId,
+      },
+      staffContext,
+    );
+    rewardIds.push(rewardId);
+  }
+
+  // A few claims so the desk has something waiting, and one already handed over.
+  for (const [index, participant] of participants.slice(0, 6).entries()) {
+    const rewardId = rewardIds[index % rewardIds.length];
+    if (!rewardId) continue;
+    const { result } = await redeemReward(
+      db,
+      { eventId, rewardId, userId: participant.userId, redeemedBy: admin },
+      `seed-redeem-${rewardId}-${participant.userId}`,
+      staffContext,
+    );
+    if (index % 3 === 0) {
+      await fulfilRedemption(
+        db,
+        { eventId, redemptionId: result.redemptionId, fulfilledBy: admin },
+        staffContext,
+      );
+    }
   }
 
   console.log('→ Verifying ledger integrity');

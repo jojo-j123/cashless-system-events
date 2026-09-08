@@ -25,6 +25,9 @@ const NAV: {
   { href: '/admin/participants', label: 'People', permission: 'participant.read.any' },
   { href: '/admin/cards', label: 'Cards', permission: 'card.read' },
   { href: '/admin/inventory', label: 'Products', permission: 'inventory.read' },
+  // Not gameOnly: rewards spend points, they do not score them, so a normal
+  // event has just as much use for them.
+  { href: '/admin/rewards', label: 'Rewards', permission: 'reward.read' },
   { href: '/admin/game', label: 'Game', permission: 'leaderboard.read', gameOnly: true },
   { href: '/admin/audit', label: 'Audit log', permission: 'audit.read' },
   { href: '/admin/system', label: 'System', permission: 'report.read', superAdminOnly: true },

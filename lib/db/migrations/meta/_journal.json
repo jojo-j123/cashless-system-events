@@ -29,6 +29,13 @@
       "when": 1790000000000,
       "tag": "0003_collapse_staff_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0004_reward_redemptions",
+      "breakpoints": true
     }
   ]
 }

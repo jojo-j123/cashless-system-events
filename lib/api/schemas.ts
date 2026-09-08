@@ -204,3 +204,26 @@ export const challengeStatusSchema = z.object({
 });
 
 export const challengeAwardSchema = z.object({ userId: uuid });
+
+export const rewardCreateSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  description: z.string().trim().max(2000).nullish(),
+  type: z.enum(['PRODUCT', 'EXPERIENCE', 'PRIVILEGE', 'DIGITAL']).optional(),
+  costPoints: z.number().int().min(0),
+  /** null means unlimited. */
+  stock: z.number().int().min(0).nullish(),
+  productId: uuid.nullish(),
+});
+
+export const rewardPatchSchema = z.object({
+  name: z.string().trim().min(2).max(200).optional(),
+  description: z.string().trim().max(2000).nullish(),
+  costPoints: z.number().int().min(0).optional(),
+  stock: z.number().int().min(0).nullish(),
+  isActive: z.boolean().optional(),
+});
+
+/** Omit userId to redeem for yourself; supplying one needs reward.redeem.any. */
+export const rewardRedeemSchema = z.object({ userId: uuid.optional() });
+
+export const redemptionCancelSchema = z.object({ reason });

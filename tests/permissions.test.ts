@@ -48,6 +48,11 @@ describe('cashier boundaries', () => {
     'approval.decide',
     'challenge.award',
     'terminal.write',
+    'reward.write',
+    // Spending somebody else's points is not till work: a cashier charges
+    // wallets only at their own store, and a reward desk is event-wide.
+    'reward.redeem.any',
+    'reward.fulfil',
   ];
 
   it.each(FORBIDDEN_FOR_CASHIER)('a cashier cannot %s', async (permission) => {
@@ -207,6 +212,22 @@ describe('permission catalogue', () => {
         .sort();
       expect(creators, `${permission} is granted too widely`).toEqual(['ADMIN', 'SUPER_ADMIN']);
     }
+  });
+
+  it('everyone can spend their own points on a reward, nobody else’s', () => {
+    // Redeeming for yourself is ordinary spending, so a participant has it.
+    // Doing it for somebody else drains their wallet, so it stops at admin.
+    for (const role of ['PARTICIPANT', 'CASHIER', 'ADMIN', 'SUPER_ADMIN'] as const) {
+      expect(ROLE_PERMISSIONS[role], `${role} cannot redeem for themselves`).toContain(
+        'reward.redeem.self',
+      );
+    }
+
+    const onBehalf = Object.entries(ROLE_PERMISSIONS)
+      .filter(([, granted]) => granted.includes('reward.redeem.any'))
+      .map(([role]) => role)
+      .sort();
+    expect(onBehalf).toEqual(['ADMIN', 'SUPER_ADMIN']);
   });
 
   it('a cashier can read challenges but never award one', () => {

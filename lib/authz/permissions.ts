@@ -57,6 +57,11 @@ export const PERMISSIONS = {
   'reward.read': 'View rewards',
   'reward.write': 'Create and edit rewards',
   'reward.redeem.self': 'Redeem a reward for yourself',
+  // Redeeming on somebody else's behalf spends their points, so it is kept off
+  // the till: a cashier already charges wallets, but only at their own store,
+  // and a reward desk is event-wide. Admins run the desk.
+  'reward.redeem.any': 'Redeem a reward on a participant’s behalf',
+  'reward.fulfil': 'Hand over a claimed reward, or cancel a claim',
 
   // Operations & reporting
   'report.read': 'View reports and analytics',

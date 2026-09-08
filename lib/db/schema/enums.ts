@@ -172,3 +172,9 @@ export const approvalRequestType = pgEnum('approval_request_type', [
   'LARGE_REFUND',
   'BULK_ALLOCATION',
 ]);
+
+export const rewardRedemptionStatus = pgEnum('reward_redemption_status', [
+  'CLAIMED',
+  'FULFILLED',
+  'CANCELLED',
+]);
