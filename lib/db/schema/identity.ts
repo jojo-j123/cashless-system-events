@@ -102,6 +102,15 @@ export const roles = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     isSystem: boolean('is_system').notNull().default(true),
+    /**
+     * Set once a super admin edits this role's permissions by hand.
+     *
+     * The TypeScript catalogue seeds a role and stops being its owner the
+     * moment somebody changes it here. Without this flag the sync would
+     * faithfully undo every edit on the next deploy or reset, which is a
+     * quieter failure than refusing the edit outright.
+     */
+    permissionsCustomised: boolean('permissions_customised').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('roles_key_key').on(t.key)],

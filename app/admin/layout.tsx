@@ -1,40 +1,10 @@
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { requireSession } from '@/lib/auth/server';
 import { Badge } from '@/components/ui/primitives';
-import type { Permission } from '@/lib/authz/permissions';
+import { isStaff, visibleNavFor } from '@/lib/admin/nav';
 import { getEventSettings } from '@/lib/settings/service';
 import { SignOutButton } from '@/components/auth/SignOutButton';
-
-/**
- * One flat list, in the order the desk actually uses it.
- *
- * Grouping five links under five headings was more chrome than navigation.
- * `gameOnly` entries disappear entirely when the event is not running a game,
- * so an operator running a plain cashless bar never sees a leaderboard.
- */
-const NAV: {
-  href: string;
-  label: string;
-  permission: Permission;
-  gameOnly?: boolean;
-  superAdminOnly?: boolean;
-}[] = [
-  { href: '/admin', label: 'Dashboard', permission: 'report.read' },
-  { href: '/admin/enrol', label: 'Add a card', permission: 'card.write' },
-  // The till itself, not an admin view of it. An admin holds `pos.operate`
-  // across every store, so this is the one link here that leaves the console.
-  { href: '/pos', label: 'Till', permission: 'pos.operate' },
-  { href: '/admin/points', label: 'Top-ups', permission: 'wallet.topup' },
-  { href: '/admin/participants', label: 'People', permission: 'participant.read.any' },
-  { href: '/admin/cards', label: 'Cards', permission: 'card.read' },
-  { href: '/admin/inventory', label: 'Products', permission: 'inventory.read' },
-  // Not gameOnly: rewards spend points, they do not score them, so a normal
-  // event has just as much use for them.
-  { href: '/admin/rewards', label: 'Rewards', permission: 'reward.read' },
-  { href: '/admin/game', label: 'Game', permission: 'leaderboard.read', gameOnly: true },
-  { href: '/admin/audit', label: 'Audit log', permission: 'audit.read' },
-  { href: '/admin/system', label: 'System', permission: 'report.read', superAdminOnly: true },
-];
 
 export const dynamic = 'force-dynamic';
 
@@ -43,17 +13,16 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }): Promise<React.ReactElement> {
-  const session = await requireSession('report.read');
+  // Admission is "can you use anything in here", not one named permission.
+  // Gating the whole console on `report.read` locked out every custom role
+  // that was built to do one job well. Each page still checks its own.
+  const session = await requireSession();
   const settings = await getEventSettings(session.db, session.eventId);
 
-  const visible = NAV.filter(
-    (item) =>
-      (!item.gameOnly || settings.gameModeEnabled) &&
-      (!item.superAdminOnly || session.actor.isSuperAdmin) &&
-      // Filtered server-side, so a link a user cannot use is never rendered.
-      // The real control is in the API, always.
-      session.actor.canAnywhere(item.permission, session.eventId),
-  );
+  if (!isStaff(session.actor, session.eventId)) redirect('/me?denied=1');
+
+  const visible = visibleNavFor(session.actor, session.eventId, settings.gameModeEnabled);
+  if (visible.length === 0) redirect('/me?denied=1');
 
   return (
     <div className="min-h-screen bg-ink-100">

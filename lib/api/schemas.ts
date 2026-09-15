@@ -251,3 +251,30 @@ export const posTopUpSchema = z.object({
   terminalId: uuid.nullish(),
   pin: z.string().regex(/^\d{4,12}$/),
 });
+
+/* Roles and staff accounts ------------------------------------------------ */
+
+const permissionKeys = z.array(z.string().min(1).max(100)).max(200);
+
+export const roleCreateSchema = z.object({
+  key: z.string().trim().min(3).max(40),
+  name: z.string().trim().min(2).max(100),
+  description: z.string().trim().max(500).nullish(),
+  permissions: permissionKeys,
+});
+
+export const rolePermissionsSchema = z.object({ permissions: permissionKeys });
+
+export const staffCreateSchema = z.object({
+  displayName: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email().max(320),
+  password: z.string().min(12).max(1024),
+  roleKey: z.string().trim().min(2).max(40),
+  storeId: uuid.nullish(),
+});
+
+export const staffRoleSchema = z.object({
+  userId: uuid,
+  roleKey: z.string().trim().min(2).max(40),
+  storeId: uuid.nullish(),
+});

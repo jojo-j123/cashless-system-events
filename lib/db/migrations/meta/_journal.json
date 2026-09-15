@@ -43,6 +43,13 @@
       "when": 1791000000000,
       "tag": "0005_staff_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0006_custom_roles",
+      "breakpoints": true
     }
   ]
 }

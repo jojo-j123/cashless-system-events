@@ -4,6 +4,7 @@ import { auditLogs, eventParticipants, roles, sessions, userRoles, users } from 
 import { recordAudit, type AuditContext } from '../audit';
 import { ConflictError, ForbiddenError, ValidationError } from '../errors';
 import { hashPassword, verifyPassword } from '../auth/password';
+import { generateToken } from '../auth/tokens';
 
 export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
 
@@ -412,5 +413,245 @@ export async function setAccountCredentials(
     });
 
     return { userId: input.targetUserId, email: email ?? target.email };
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Staff accounts                                                             */
+/* -------------------------------------------------------------------------- */
+
+export interface StaffAccount {
+  userId: string;
+  displayName: string;
+  email: string | null;
+}
+
+/**
+ * Create a login for somebody who works the event.
+ *
+ * A staff account is a `users` row with a password and a role grant, and
+ * nothing else: no participant row, no wallet, no card. Staff spend nothing, so
+ * giving them a wallet would put accounts in the ledger that can never be
+ * reconciled against a real person's spending. Someone who needs both gets
+ * enrolled separately at the desk.
+ *
+ * The grant is scoped to the event rather than left global, so a login made for
+ * one client's event does not quietly carry authority into the next one.
+ */
+export async function createStaffAccount(
+  db: Database,
+  input: {
+    eventId: string;
+    displayName: string;
+    email: string;
+    password: string;
+    roleKey: string;
+    storeId?: string | null;
+    actorUserId: string;
+  },
+  context: AuditContext,
+): Promise<StaffAccount> {
+  const displayName = input.displayName.trim();
+  const email = input.email.trim().toLowerCase();
+
+  if (displayName.length < 2) {
+    throw new ValidationError('Give the account a name of at least 2 characters.');
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new ValidationError('That does not look like an email address.');
+  }
+  if (input.password.length < 12) {
+    throw new ValidationError('Use at least 12 characters for the password.');
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
+  return db.transaction(async (tx) => {
+    const [role] = await tx
+      .select({ id: roles.id, key: roles.key })
+      .from(roles)
+      .where(eq(roles.key, input.roleKey))
+      .limit(1);
+    if (!role) throw new ValidationError(`There is no role called ${input.roleKey}.`);
+    if (role.key === 'SUPER_ADMIN') {
+      throw new ForbiddenError(
+        'A super admin is not made from this screen. Promote an existing account deliberately.',
+      );
+    }
+
+    const [clash] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(sql`lower(${users.email}) = ${email}`, isNull(users.deletedAt)))
+      .limit(1);
+    if (clash) throw new ConflictError('Another account already uses that email address.');
+
+    const [user] = await tx
+      .insert(users)
+      .values({
+        displayName,
+        email,
+        passwordHash,
+        qrSecret: generateToken(24),
+        isSuperAdmin: false,
+      })
+      .returning({ id: users.id });
+    if (!user) throw new Error('Failed to create the account');
+
+    await tx.insert(userRoles).values({
+      userId: user.id,
+      roleId: role.id,
+      eventId: input.eventId,
+      storeId: input.storeId ?? null,
+      grantedBy: input.actorUserId,
+    });
+
+    await recordAudit(tx, {
+      ...context,
+      eventId: input.eventId,
+      action: 'account.created',
+      targetType: 'user',
+      targetId: user.id,
+      after: { displayName, email, roleKey: role.key, storeId: input.storeId ?? null },
+    });
+
+    return { userId: user.id, displayName, email };
+  });
+}
+
+/**
+ * Retire a staff login.
+ *
+ * Soft, not hard. The row is referenced by everything that account ever did —
+ * who took the cash, who approved the refund, who deactivated the card — and
+ * those references are the audit trail. Clearing the email frees it for reuse
+ * while leaving the history readable, which is the same trade the bulk
+ * participant removal makes.
+ */
+export async function deleteStaffAccount(
+  db: Database,
+  input: { userId: string; actorUserId: string },
+  context: AuditContext,
+): Promise<void> {
+  if (input.userId === input.actorUserId) {
+    throw new ConflictError('You cannot delete the account you are signed in with.');
+  }
+
+  await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({
+        displayName: users.displayName,
+        email: users.email,
+        isSuperAdmin: users.isSuperAdmin,
+      })
+      .from(users)
+      .where(and(eq(users.id, input.userId), isNull(users.deletedAt)))
+      .limit(1);
+    if (!target) throw new ConflictError('That account no longer exists.');
+    if (target.isSuperAdmin) {
+      throw new ForbiddenError('A super admin account cannot be deleted from here.');
+    }
+
+    const [participant] = await tx
+      .select({ id: eventParticipants.id })
+      .from(eventParticipants)
+      .where(eq(eventParticipants.userId, input.userId))
+      .limit(1);
+    if (participant) {
+      throw new ConflictError(
+        'That account is also enrolled as a participant. Remove them from the People list instead, so their balance is settled.',
+        'account_is_participant',
+      );
+    }
+
+    await tx.delete(userRoles).where(eq(userRoles.userId, input.userId));
+    await tx
+      .update(users)
+      .set({
+        deletedAt: new Date(),
+        status: 'DEACTIVATED',
+        email: null,
+        passwordHash: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, input.userId));
+    await tx
+      .update(sessions)
+      .set({ revokedAt: new Date(), revokedReason: 'account deleted' })
+      .where(and(eq(sessions.userId, input.userId), isNull(sessions.revokedAt)));
+
+    await recordAudit(tx, {
+      ...context,
+      action: 'account.deleted',
+      targetType: 'user',
+      targetId: input.userId,
+      before: { displayName: target.displayName, email: target.email },
+    });
+  });
+}
+
+/** Move a staff account onto a different role, replacing what it held. */
+export async function setStaffRole(
+  db: Database,
+  input: {
+    eventId: string;
+    userId: string;
+    roleKey: string;
+    storeId?: string | null;
+    actorUserId: string;
+  },
+  context: AuditContext,
+): Promise<void> {
+  if (input.userId === input.actorUserId) {
+    throw new ConflictError('You cannot change your own role.');
+  }
+
+  await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ isSuperAdmin: users.isSuperAdmin })
+      .from(users)
+      .where(and(eq(users.id, input.userId), isNull(users.deletedAt)))
+      .limit(1);
+    if (!target) throw new ConflictError('That account no longer exists.');
+    if (target.isSuperAdmin) {
+      throw new ForbiddenError('A super admin holds every permission by flag, not by role.');
+    }
+
+    const [role] = await tx
+      .select({ id: roles.id, key: roles.key })
+      .from(roles)
+      .where(eq(roles.key, input.roleKey))
+      .limit(1);
+    if (!role) throw new ValidationError(`There is no role called ${input.roleKey}.`);
+    if (role.key === 'SUPER_ADMIN') {
+      throw new ForbiddenError('Super admin is not granted from this screen.');
+    }
+
+    await tx
+      .delete(userRoles)
+      .where(and(eq(userRoles.userId, input.userId), eq(userRoles.eventId, input.eventId)));
+    await tx.insert(userRoles).values({
+      userId: input.userId,
+      roleId: role.id,
+      eventId: input.eventId,
+      storeId: input.storeId ?? null,
+      grantedBy: input.actorUserId,
+    });
+
+    // A role change that leaves the old session running is a role change that
+    // has not happened yet: the actor is built once, at sign-in.
+    await tx
+      .update(sessions)
+      .set({ revokedAt: new Date(), revokedReason: 'role changed' })
+      .where(and(eq(sessions.userId, input.userId), isNull(sessions.revokedAt)));
+
+    await recordAudit(tx, {
+      ...context,
+      eventId: input.eventId,
+      action: 'account.role_changed',
+      targetType: 'user',
+      targetId: input.userId,
+      after: { roleKey: role.key, storeId: input.storeId ?? null },
+    });
   });
 }

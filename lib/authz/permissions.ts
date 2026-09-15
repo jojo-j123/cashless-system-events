@@ -106,7 +106,7 @@ export const STAFF_ROLE_KEYS = ['SUPER_ADMIN', 'ADMIN', 'CASHIER'] as const;
 
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
-const PARTICIPANT_PERMISSIONS: Permission[] = [
+export const PARTICIPANT_PERMISSIONS: Permission[] = [
   'participant.read.self',
   'wallet.read.self',
   'purchase.read.self',
@@ -155,6 +155,21 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   CASHIER: unique(CASHIER_PERMISSIONS),
   PARTICIPANT: unique(PARTICIPANT_PERMISSIONS),
 };
+
+/**
+ * The permissions that mean somebody works here.
+ *
+ * Defined as the complement of the participant baseline rather than as a list,
+ * so it cannot drift: a permission added to the catalogue is staff-only unless
+ * it is deliberately handed to every attendee. This is what admits somebody to
+ * the console, and it has to be a set rather than one named permission —
+ * gating on `report.read` alone locked out every custom role built to do a
+ * single job, and gating on "any nav link" let participants in, because an
+ * attendee legitimately holds `reward.read` and `leaderboard.read`.
+ */
+export const STAFF_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter(
+  (permission) => !PARTICIPANT_PERMISSIONS.includes(permission),
+);
 
 export const ROLE_DESCRIPTIONS: Record<RoleKey, string> = {
   SUPER_ADMIN: 'Owns the system: everything an admin can do, plus granting roles.',
