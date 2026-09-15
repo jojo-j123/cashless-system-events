@@ -11,6 +11,7 @@ export const PERMISSIONS = {
   'participant.read.any': 'View any participant',
   'participant.write': 'Create and edit participants',
   'participant.suspend': 'Suspend or reactivate a participant',
+  'participant.remove': 'Remove participants from an event in bulk',
 
   // Teams
   'team.read': 'View teams and members',
@@ -24,6 +25,7 @@ export const PERMISSIONS = {
   'card.suspend': 'Suspend, mark lost, or deactivate a card',
   'card.replace': 'Replace a card, carrying the wallet across',
   'card.resolve': 'Tap a card and resolve it to an account',
+  'card.remove': 'Delete or deactivate cards in bulk',
 
   // Wallet & ledger
   'wallet.read.self': 'View your own wallet',

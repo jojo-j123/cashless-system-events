@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiError, api, newIdempotencyKey } from '@/lib/client/api';
 import { Alert, Badge, Button, Card, EmptyState } from '@/components/ui/primitives';
+import { BulkRemovalPanel } from '@/components/admin/BulkRemovalPanel';
 
 interface CardRow {
   id: string;
@@ -38,12 +39,14 @@ export function CardManager({
   canSuspend,
   canReplace,
   canCreate,
+  canRemove,
 }: {
   cards: CardRow[];
   canAssign: boolean;
   canSuspend: boolean;
   canReplace: boolean;
   canCreate: boolean;
+  canRemove: boolean;
 }): React.ReactElement {
   const router = useRouter();
   const [filter, setFilter] = useState('');
@@ -51,6 +54,7 @@ export function CardManager({
   const [message, setMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [issuedTokens, setIssuedTokens] = useState<{ cardRef: string; token: string }[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -64,6 +68,22 @@ export function CardManager({
       );
     });
   }, [cards, filter, statusFilter]);
+
+  const toggle = (cardId: string): void => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(cardId)) next.add(cardId);
+      return next;
+    });
+  };
+
+  // Select-all covers what the filters are showing, never the rows hidden
+  // behind them — a checkbox must not reach further than the eye can.
+  const allVisibleSelected = visible.length > 0 && visible.every((card) => selected.has(card.id));
+
+  const toggleAllVisible = (): void => {
+    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((card) => card.id)));
+  };
 
   const run = async (id: string, work: () => Promise<void>, success: string): Promise<void> => {
     setBusyId(id);
@@ -246,6 +266,16 @@ export function CardManager({
             <table className="w-full text-sm">
               <thead className="bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
+                  {canRemove ? (
+                    <th className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisible}
+                        aria-label="Select all visible cards"
+                      />
+                    </th>
+                  ) : null}
                   <th className="px-4 py-2">Card</th>
                   <th className="px-4 py-2">Holder</th>
                   <th className="px-4 py-2">Status</th>
@@ -256,6 +286,16 @@ export function CardManager({
               <tbody className="divide-y divide-ink-200">
                 {visible.map((card) => (
                   <tr key={card.id} className={busyId === card.id ? 'opacity-50' : ''}>
+                    {canRemove ? (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(card.id)}
+                          onChange={() => toggle(card.id)}
+                          aria-label={`Select ${card.cardRef}`}
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3">
                       <p className="tabular font-semibold text-ink-900">{card.cardRef}</p>
                       <p className="text-xs text-ink-400">{card.technology}</p>
@@ -324,6 +364,14 @@ export function CardManager({
           </div>
         )}
       </Card>
+
+      {canRemove ? (
+        <BulkRemovalPanel
+          kind="cards"
+          ids={[...selected]}
+          onCleared={() => setSelected(new Set())}
+        />
+      ) : null}
     </div>
   );
 }

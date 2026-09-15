@@ -227,3 +227,16 @@ export const rewardPatchSchema = z.object({
 export const rewardRedeemSchema = z.object({ userId: uuid.optional() });
 
 export const redemptionCancelSchema = z.object({ reason });
+
+/* Bulk removal ------------------------------------------------------------ */
+
+const removalIds = z.array(uuid).min(1).max(1_000);
+
+export const removalPreviewSchema = z.object({ ids: removalIds });
+
+/** A longer minimum than the shared `reason`: this one ends up in the audit log
+ *  as the only explanation for why a row is gone. */
+export const removalCommitSchema = z.object({
+  ids: removalIds,
+  reason: z.string().trim().min(5).max(500),
+});
