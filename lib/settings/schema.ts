@@ -51,6 +51,23 @@ export const eventSettingsSchema = z.object({
   /** Whether refunds put stock back by default. Staff can override per refund. */
   restockOnRefundByDefault: z.boolean().default(true),
 
+  /* ---- Till -------------------------------------------------------------- */
+  /**
+   * Which way round a sale runs.
+   *
+   * RING_FIRST builds the basket and taps once at the end: one tap per
+   * customer, which is what keeps a food-court queue moving. TAP_FIRST reads
+   * the card before anything is rung up, so the balance is on screen while the
+   * customer chooses and a sale can never end in a decline. It costs counter
+   * time and buys away the worst moment at the till.
+   */
+  posFlow: z.enum(['RING_FIRST', 'TAP_FIRST']).default('RING_FIRST'),
+  /**
+   * Cap on a single top-up taken at the till rather than the counter. Zero
+   * turns till top-ups off, which leaves minting points to the admin desk.
+   */
+  posTopUpLimit: z.number().int().nonnegative().default(2_000),
+
   /* ---- Sessions ---------------------------------------------------------- */
   sessionTimeoutMinutes: z.number().int().positive().max(43_200).default(720),
   posSessionTimeoutMinutes: z.number().int().positive().max(1_440).default(240),

@@ -240,3 +240,14 @@ export const removalCommitSchema = z.object({
   ids: removalIds,
   reason: z.string().trim().min(5).max(500),
 });
+
+/** A till top-up carries no reason field: the reason is always "at the till",
+ *  and the PIN is mandatory rather than threshold-driven. */
+export const posTopUpSchema = z.object({
+  userId: uuid,
+  amountPoints: positivePoints,
+  /** The till taking the cash. Authority is scoped to it, as it is for a sale. */
+  storeId: uuid,
+  terminalId: uuid.nullish(),
+  pin: z.string().regex(/^\d{4,12}$/),
+});

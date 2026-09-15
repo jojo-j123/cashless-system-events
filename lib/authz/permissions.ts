@@ -31,6 +31,7 @@ export const PERMISSIONS = {
   'wallet.read.self': 'View your own wallet',
   'wallet.read.any': 'View any wallet and its ledger',
   'wallet.topup': 'Issue points to a participant or team',
+  'wallet.topup.pos': 'Load points at the till, up to the counter limit',
   'wallet.adjust': 'Make a manual adjustment, up or down',
   'wallet.transfer.self': 'Send points to another participant',
   'ledger.read': 'Read the raw ledger',
@@ -121,8 +122,16 @@ const PARTICIPANT_PERMISSIONS: Permission[] = [
 
 /**
  * A cashier can take money in and, if permitted, give it back — but cannot
- * create points, change a price, or touch a wallet directly. That separation
- * is the whole point of the role.
+ * change a price or touch a wallet directly. That separation is the whole
+ * point of the role.
+ *
+ * The one place a cashier may create points is the till: `wallet.topup.pos`
+ * covers taking cash from a customer who is short mid-sale, and it is a
+ * narrower thing than `wallet.topup` in three ways — it is capped per
+ * transaction by `posTopUpLimit`, it demands a staff PIN every time so the
+ * mint is attributable to a person rather than a signed-in terminal, and it
+ * cannot allocate to a team. Sending the customer to the admin desk instead
+ * costs them their place in the queue, which is the trade this settles.
  */
 const CASHIER_PERMISSIONS: Permission[] = [
   ...PARTICIPANT_PERMISSIONS,
@@ -133,6 +142,7 @@ const CASHIER_PERMISSIONS: Permission[] = [
   'purchase.read.any',
   'purchase.refund',
   'inventory.read',
+  'wallet.topup.pos',
 ];
 
 const ADMIN_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter(
