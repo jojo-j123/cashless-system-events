@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react';
 import { ApiError, api } from '@/lib/client/api';
 import type { UserUsage } from '@/lib/services/tenancy';
 import { Alert, Badge, Button, Card } from '@/components/ui/primitives';
+import { StaffAccounts } from '@/components/admin/StaffAccounts';
+import { RoleEditor, type PermissionRow, type RoleRow } from '@/components/admin/RoleEditor';
 
 interface Activity {
   action: string;
@@ -23,13 +25,24 @@ function when(value: string | null): string {
 export function SystemConsole({
   usage,
   activity,
+  roles,
+  permissions,
 }: {
   usage: UserUsage[];
   activity: Activity[];
+  roles: RoleRow[];
+  permissions: PermissionRow[];
 }): React.ReactElement {
+  // Super admin is excluded: it is a flag on the account, not a role anyone is
+  // given from a dropdown, and offering it here would be offering something
+  // the service refuses.
+  const assignableRoles = roles.filter((role) => role.key !== 'SUPER_ADMIN').map((role) => role.key);
+
   return (
     <div className="space-y-8">
       <Credentials />
+      <StaffAccounts accounts={usage} roleKeys={assignableRoles} />
+      <RoleEditor roles={roles} permissions={permissions} />
       <Usage rows={usage} />
       <Activity rows={activity} />
       <DangerZone />

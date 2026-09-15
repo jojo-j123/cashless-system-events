@@ -1,9 +1,10 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Executor, Transaction } from '../db/client';
-import { accounts, ledgerEntries, ledgerTransactions } from '../db/schema';
+import { accounts, events, ledgerEntries, ledgerTransactions } from '../db/schema';
 import type { accountType, ledgerTransactionType } from '../db/schema';
 import { nextRef } from '../core/refs';
 import {
+  EventNotOperationalError,
   InsufficientFundsError,
   LimitExceededError,
   NotFoundError,
@@ -244,6 +245,25 @@ function mergeLegs(legs: LedgerLeg[]): LedgerLeg[] {
 /* -------------------------------------------------------------------------- */
 /* Account lookup and provisioning                                            */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Points cannot be issued once an event has ended or been archived.
+ *
+ * Lives here rather than beside one caller because it holds for *every* way
+ * points come into existence — a top-up, an allocation, a challenge reward. A
+ * second copy of this rule is a second place for it to drift.
+ */
+export async function assertEventAcceptsPoints(db: Executor, eventId: string): Promise<void> {
+  const [event] = await db
+    .select({ status: events.status })
+    .from(events)
+    .where(eq(events.id, eventId))
+    .limit(1);
+  if (!event) throw new NotFoundError('That event');
+  if (event.status === 'ENDED' || event.status === 'ARCHIVED') {
+    throw new EventNotOperationalError(event.status, 'issuing points');
+  }
+}
 
 export async function getSystemAccount(
   db: Executor,

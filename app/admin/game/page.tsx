@@ -8,6 +8,10 @@ import {
   type TeamMetric,
 } from '@/lib/services/reports';
 import { Card, EmptyState, Points } from '@/components/ui/primitives';
+import { listChallenges } from '@/lib/services/challenges';
+import { ChallengeBoard } from '@/components/admin/ChallengeBoard';
+import { eventParticipants, users } from '@/lib/db/schema';
+import { asc, eq } from 'drizzle-orm';
 
 export const metadata = { title: 'Game · Cashless Event Platform' };
 export const dynamic = 'force-dynamic';
@@ -41,9 +45,20 @@ export default async function GamePage(): Promise<React.ReactElement> {
   // Game mode off means this surface does not exist, not that it is empty.
   if (!settings.gameModeEnabled) notFound();
 
-  const [teams, individuals] = await Promise.all([
+  const canReadChallenges = session.actor.can('challenge.read', { eventId: session.eventId });
+
+  const [teams, individuals, challenges, players] = await Promise.all([
     getTeamLeaderboard(session.db, session.eventId, settings.teamRankingMetric),
     getIndividualLeaderboard(session.db, session.eventId, settings.individualRankingMetric, 25),
+    canReadChallenges ? listChallenges(session.db, session.eventId) : Promise.resolve([]),
+    canReadChallenges
+      ? session.db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(eventParticipants)
+          .innerJoin(users, eq(users.id, eventParticipants.userId))
+          .where(eq(eventParticipants.eventId, session.eventId))
+          .orderBy(asc(users.displayName))
+      : Promise.resolve([]),
   ]);
 
   const teamValue = (standing: (typeof teams)[number]): number =>
@@ -73,6 +88,15 @@ export default async function GamePage(): Promise<React.ReactElement> {
           {INDIVIDUAL_METRIC_LABEL[settings.individualRankingMetric].toLowerCase()} for players.
         </p>
       </div>
+
+      {canReadChallenges ? (
+        <ChallengeBoard
+          challenges={challenges}
+          players={players}
+          canWrite={session.actor.can('challenge.write', { eventId: session.eventId })}
+          canAward={session.actor.can('challenge.award', { eventId: session.eventId })}
+        />
+      ) : null}
 
       <section>
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-ink-500">Teams</h2>

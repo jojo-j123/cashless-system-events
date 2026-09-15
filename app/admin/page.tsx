@@ -1,6 +1,13 @@
 import { requireSession } from '@/lib/auth/server';
-import { getEventOverview, getSalesByStore, getTopProducts } from '@/lib/services/reports';
+import {
+  EXPORT_DATASETS,
+  GAME_ONLY_EXPORT_DATASETS,
+  getEventOverview,
+  getSalesByStore,
+  getTopProducts,
+} from '@/lib/services/reports';
 import { verifyLedgerIntegrity } from '@/lib/services/ledger';
+import { getEventSettings } from '@/lib/settings/service';
 import { Alert, Card, Points, StatTile } from '@/components/ui/primitives';
 
 export const metadata = { title: 'Dashboard · Admin' };
@@ -9,14 +16,21 @@ export const dynamic = 'force-dynamic';
 export default async function AdminDashboard(): Promise<React.ReactElement> {
   const session = await requireSession('report.read');
 
-  const [overview, sales, products, integrity] = await Promise.all([
+  const [overview, sales, products, integrity, settings] = await Promise.all([
     getEventOverview(session.db, session.eventId),
     getSalesByStore(session.db, session.eventId),
     getTopProducts(session.db, session.eventId, { limit: 8 }),
     verifyLedgerIntegrity(session.db, session.eventId),
+    getEventSettings(session.db, session.eventId),
   ]);
 
   const maxSales = Math.max(1, ...sales.map((store) => store.netPoints));
+
+  // Offering an export the event cannot produce is a dead button; the route
+  // refuses game-only datasets on a normal event, so do not advertise them.
+  const datasets = EXPORT_DATASETS.filter(
+    (dataset) => settings.gameModeEnabled || !GAME_ONLY_EXPORT_DATASETS.includes(dataset),
+  );
 
   return (
     <div className="space-y-6">
@@ -129,17 +143,15 @@ export default async function AdminDashboard(): Promise<React.ReactElement> {
       <Card>
         <h2 className="text-sm font-bold uppercase tracking-wide text-ink-500">Export</h2>
         <div className="mt-3 flex flex-wrap gap-2">
-          {['transactions', 'purchases', 'participants', 'inventory', 'teams', 'sales'].map(
-            (dataset) => (
-              <a
-                key={dataset}
-                href={`/api/export?dataset=${dataset}`}
-                className="rounded-lg border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium capitalize text-ink-700 hover:bg-ink-50"
-              >
-                {dataset}.csv
-              </a>
-            ),
-          )}
+          {datasets.map((dataset) => (
+            <a
+              key={dataset}
+              href={`/api/export?dataset=${dataset}`}
+              className="rounded-lg border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium capitalize text-ink-700 hover:bg-ink-50"
+            >
+              {dataset}.csv
+            </a>
+          ))}
         </div>
       </Card>
     </div>

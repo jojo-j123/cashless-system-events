@@ -7,10 +7,16 @@ import {
   type TeamMetric,
 } from '@/lib/services/reports';
 import { getEventSettings } from '@/lib/settings/service';
-import { ForbiddenError } from '@/lib/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/errors';
 
 export const GET = route({ permission: 'leaderboard.read' }, async ({ request, context }) => {
   const settings = await getEventSettings(context.db, context.eventId);
+
+  // A normal event is not running a game, so there is nothing to rank — for
+  // staff either. Matching /admin/game, which 404s for the same reason.
+  if (!settings.gameModeEnabled) {
+    throw new NotFoundError('A leaderboard for this event');
+  }
 
   // Operators can hide standings from participants without hiding them from staff.
   if (

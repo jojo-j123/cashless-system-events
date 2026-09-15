@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/auth/server';
 import { nfcCards, stores, users } from '@/lib/db/schema';
 import { PosTerminal } from '@/components/pos/PosTerminal';
 import { terminals } from '@/lib/db/schema';
+import { getEventSettings } from '@/lib/settings/service';
 
 export const metadata = { title: 'POS · Cashless Event Platform' };
 export const dynamic = 'force-dynamic';
@@ -68,11 +69,20 @@ export default async function PosPage(): Promise<React.ReactElement> {
           .limit(8)
       : [];
 
+  const settings = await getEventSettings(session.db, session.eventId);
+
   return (
     <PosTerminal
       stores={storeRows}
       simulatorCards={simulatorCards}
       terminalId={terminal?.id ?? null}
+      posFlow={settings.posFlow}
+      posTopUpLimit={settings.posTopUpLimit}
+      // A cashier's grant is scoped to their store, so the question here is
+      // whether they hold it anywhere in this event; the route re-checks it
+      // against the actual till when the top-up is submitted.
+      canTillTopUp={session.actor.canAnywhere('wallet.topup.pos', session.eventId)}
+      canReturnToAdmin={session.actor.canAnywhere('report.read', session.eventId)}
     />
   );
 }

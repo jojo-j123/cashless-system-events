@@ -55,6 +55,12 @@ export async function truncateAll(db: Database): Promise<void> {
   if (tables.length > 0) {
     await db.execute(sql.raw(`truncate ${tables} restart identity cascade`));
   }
+  // The catalogue tables are kept above so every test does not pay to rebuild
+  // them, but a role created in the console is data, not catalogue: it would
+  // otherwise leak into the next test. Clearing the customised flag hands the
+  // shipped roles back to `syncRolesAndPermissions`, which runs next.
+  await db.execute(sql`delete from roles where is_system = false`);
+  await db.execute(sql`update roles set permissions_customised = false where permissions_customised`);
   // Reference sequences live outside the tables, so restart them too and keep
   // refs stable and readable across tests.
   await db.execute(sql`

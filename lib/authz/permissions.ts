@@ -11,6 +11,7 @@ export const PERMISSIONS = {
   'participant.read.any': 'View any participant',
   'participant.write': 'Create and edit participants',
   'participant.suspend': 'Suspend or reactivate a participant',
+  'participant.remove': 'Remove participants from an event in bulk',
 
   // Teams
   'team.read': 'View teams and members',
@@ -24,11 +25,13 @@ export const PERMISSIONS = {
   'card.suspend': 'Suspend, mark lost, or deactivate a card',
   'card.replace': 'Replace a card, carrying the wallet across',
   'card.resolve': 'Tap a card and resolve it to an account',
+  'card.remove': 'Delete or deactivate cards in bulk',
 
   // Wallet & ledger
   'wallet.read.self': 'View your own wallet',
   'wallet.read.any': 'View any wallet and its ledger',
   'wallet.topup': 'Issue points to a participant or team',
+  'wallet.topup.pos': 'Load points at the till, up to the counter limit',
   'wallet.adjust': 'Make a manual adjustment, up or down',
   'wallet.transfer.self': 'Send points to another participant',
   'ledger.read': 'Read the raw ledger',
@@ -57,6 +60,11 @@ export const PERMISSIONS = {
   'reward.read': 'View rewards',
   'reward.write': 'Create and edit rewards',
   'reward.redeem.self': 'Redeem a reward for yourself',
+  // Redeeming on somebody else's behalf spends their points, so it is kept off
+  // the till: a cashier already charges wallets, but only at their own store,
+  // and a reward desk is event-wide. Admins run the desk.
+  'reward.redeem.any': 'Redeem a reward on a participant’s behalf',
+  'reward.fulfil': 'Hand over a claimed reward, or cancel a claim',
 
   // Operations & reporting
   'report.read': 'View reports and analytics',
@@ -98,7 +106,7 @@ export const STAFF_ROLE_KEYS = ['SUPER_ADMIN', 'ADMIN', 'CASHIER'] as const;
 
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
-const PARTICIPANT_PERMISSIONS: Permission[] = [
+export const PARTICIPANT_PERMISSIONS: Permission[] = [
   'participant.read.self',
   'wallet.read.self',
   'purchase.read.self',
@@ -114,8 +122,16 @@ const PARTICIPANT_PERMISSIONS: Permission[] = [
 
 /**
  * A cashier can take money in and, if permitted, give it back — but cannot
- * create points, change a price, or touch a wallet directly. That separation
- * is the whole point of the role.
+ * change a price or touch a wallet directly. That separation is the whole
+ * point of the role.
+ *
+ * The one place a cashier may create points is the till: `wallet.topup.pos`
+ * covers taking cash from a customer who is short mid-sale, and it is a
+ * narrower thing than `wallet.topup` in three ways — it is capped per
+ * transaction by `posTopUpLimit`, it demands a staff PIN every time so the
+ * mint is attributable to a person rather than a signed-in terminal, and it
+ * cannot allocate to a team. Sending the customer to the admin desk instead
+ * costs them their place in the queue, which is the trade this settles.
  */
 const CASHIER_PERMISSIONS: Permission[] = [
   ...PARTICIPANT_PERMISSIONS,
@@ -126,6 +142,7 @@ const CASHIER_PERMISSIONS: Permission[] = [
   'purchase.read.any',
   'purchase.refund',
   'inventory.read',
+  'wallet.topup.pos',
 ];
 
 const ADMIN_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter(
@@ -138,6 +155,21 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   CASHIER: unique(CASHIER_PERMISSIONS),
   PARTICIPANT: unique(PARTICIPANT_PERMISSIONS),
 };
+
+/**
+ * The permissions that mean somebody works here.
+ *
+ * Defined as the complement of the participant baseline rather than as a list,
+ * so it cannot drift: a permission added to the catalogue is staff-only unless
+ * it is deliberately handed to every attendee. This is what admits somebody to
+ * the console, and it has to be a set rather than one named permission —
+ * gating on `report.read` alone locked out every custom role built to do a
+ * single job, and gating on "any nav link" let participants in, because an
+ * attendee legitimately holds `reward.read` and `leaderboard.read`.
+ */
+export const STAFF_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter(
+  (permission) => !PARTICIPANT_PERMISSIONS.includes(permission),
+);
 
 export const ROLE_DESCRIPTIONS: Record<RoleKey, string> = {
   SUPER_ADMIN: 'Owns the system: everything an admin can do, plus granting roles.',

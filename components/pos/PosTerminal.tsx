@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CardCredential } from '@/lib/nfc/credentials';
 import type { ResolvedCard } from '@/lib/services/cards';
@@ -34,15 +35,22 @@ interface SimulatorCard {
   displayName: string | null;
 }
 
-type Stage = 'ringing' | 'charging' | 'done';
+type Stage = 'waiting' | 'ringing' | 'charging' | 'done';
 
 /**
- * The cashier terminal.
+ * The cashier terminal, in whichever direction the event runs it.
  *
- * Ring up first, tap once at the end. The alternative — tap, then shop — holds
- * the customer at the counter for the whole basket and taps them again if the
- * session drops. One tap per customer is the difference between a queue that
- * moves and one that does not.
+ * RING_FIRST builds the basket and taps once at the end. The alternative —
+ * tap, then shop — holds the customer at the counter for the whole basket and
+ * taps them again if the session drops. One tap per customer is the difference
+ * between a queue that moves and one that does not.
+ *
+ * TAP_FIRST pays that cost deliberately to buy away the worst moment at a till:
+ * a basket that is rung up, tapped, and declined. Reading the card first puts
+ * the balance on screen while the customer is still choosing, so the sale
+ * cannot end in a decline — a shortfall becomes a top-up before it becomes a
+ * refusal. Worth it at a merch stand where top-ups are constant; not worth it
+ * in a food-court queue at peak, which is why the event picks.
  *
  * The cashier cannot type a price, a balance, or a card number anywhere on
  * this screen. The server prices the basket and the server owns the wallet.
@@ -51,16 +59,29 @@ export function PosTerminal({
   stores,
   simulatorCards,
   terminalId,
+  posFlow,
+  posTopUpLimit,
+  canTillTopUp,
+  canReturnToAdmin,
 }: {
   stores: StoreOption[];
   simulatorCards: SimulatorCard[];
   terminalId: string | null;
+  posFlow: 'RING_FIRST' | 'TAP_FIRST';
+  posTopUpLimit: number;
+  canTillTopUp: boolean;
+  /** Admins arrive here from the console and need a way back that is not
+   *  signing out; a cashier on a shift has nowhere else to be. */
+  canReturnToAdmin: boolean;
 }): React.ReactElement {
+  const tapFirst = posFlow === 'TAP_FIRST';
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [basket, setBasket] = useState<Record<string, number>>({});
-  const [stage, setStage] = useState<Stage>('ringing');
+  const [stage, setStage] = useState<Stage>(tapFirst ? 'waiting' : 'ringing');
+  const [holder, setHolder] = useState<ResolvedCard | null>(null);
+  const [toppingUp, setToppingUp] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,12 +124,70 @@ export function PosTerminal({
     });
   }
 
+  const remaining = holder ? holder.balance - total : null;
+  const shortfall = remaining !== null && remaining < 0 ? -remaining : 0;
+
   function startNextCustomer(): void {
     setBasket({});
     setReceipt(null);
     setError(null);
-    setStage('ringing');
+    setHolder(null);
+    setToppingUp(false);
+    setStage(tapFirst ? 'waiting' : 'ringing');
   }
+
+  /** Read the card before anything is rung up, so the balance guides the basket. */
+  const identify = useCallback(
+    async (credential: CardCredential) => {
+      if (stage !== 'waiting') return;
+      setStage('charging');
+      setError(null);
+      try {
+        setHolder(
+          await api<ResolvedCard>('/api/cards/resolve', {
+            method: 'POST',
+            body: { ...credential, storeId, terminalId },
+          }),
+        );
+        setStage('ringing');
+      } catch (failure) {
+        setError(
+          failure instanceof ApiError ? failure.message : 'That card could not be read.',
+        );
+        setStage('waiting');
+      }
+    },
+    [stage, storeId, terminalId],
+  );
+
+  /**
+   * Charge a card that has already been read.
+   *
+   * No second tap: the customer presented the card at the start of the sale and
+   * asking again is how a tap-first till loses the time it just spent.
+   */
+  const chargeHolder = useCallback(async () => {
+    if (!holder || lines.length === 0 || stage !== 'ringing') return;
+    setStage('charging');
+    setError(null);
+    try {
+      setReceipt(
+        await submitWithRetry<Receipt>(
+          '/api/purchases',
+          { storeId, userId: holder.userId, cardId: holder.cardId, terminalId, lines },
+          newIdempotencyKey(),
+        ),
+      );
+      setStage('done');
+    } catch (failure) {
+      setError(
+        failure instanceof ApiError
+          ? failure.message
+          : 'The charge did not go through. Try again.',
+      );
+      setStage('ringing');
+    }
+  }, [holder, lines, stage, storeId, terminalId]);
 
   /**
    * Resolve the tap, then charge it.
@@ -151,21 +230,84 @@ export function PosTerminal({
     [lines, stage, storeId, terminalId],
   );
 
-  // Readers hand back a plain callback, so the async charge is kicked off
-  // rather than awaited here; every failure is already surfaced as state.
+  // Readers hand back a plain callback, so the async work is kicked off rather
+  // than awaited here; every failure is already surfaced as state.
   const onTap = useCallback(
     (credential: CardCredential) => {
-      void charge(credential);
+      if (tapFirst) void identify(credential);
+      else void charge(credential);
     },
-    [charge],
+    [charge, identify, tapFirst],
   );
 
-  // Armed only while there is something to charge, so a stray tap against a
-  // resting terminal can never move money.
-  const reader = useCardReader(onTap, { enabled: stage === 'ringing' && lines.length > 0 });
+  // Ring-first arms the reader only while there is something to charge, so a
+  // stray tap against a resting terminal can never move money. Tap-first arms
+  // it only while waiting, where a tap identifies and cannot spend at all.
+  const reader = useCardReader(onTap, {
+    enabled: tapFirst ? stage === 'waiting' : stage === 'ringing' && lines.length > 0,
+  });
 
   if (stage === 'done' && receipt) {
     return <PaidScreen receipt={receipt} onNext={startNextCustomer} />;
+  }
+
+  if (tapFirst && (stage === 'waiting' || (stage === 'charging' && holder === null))) {
+    return (
+      <div className="flex min-h-screen flex-col bg-ink-100">
+        <header className="flex items-center justify-between border-b border-ink-200 bg-white px-4 py-3">
+          <p className="text-sm font-bold text-ink-900">{store?.name ?? 'No store'}</p>
+          <span className="flex items-center gap-2">
+            {canReturnToAdmin ? (
+            <Link
+              href="/admin"
+              className="rounded-lg px-2 py-2 text-sm font-medium text-brand-600 hover:bg-ink-50"
+            >
+              Console
+            </Link>
+          ) : null}
+          <SignOutButton confirmWhen={false} />
+          </span>
+        </header>
+
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 p-4">
+          {error ? (
+            <Alert tone="danger" title="Not read">
+              {error}
+            </Alert>
+          ) : null}
+
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-ink-900">Tap the card to start</h1>
+            <p className="mt-1 text-sm text-ink-500">
+              The balance shows before anything is rung up.
+            </p>
+          </div>
+
+          {stage === 'charging' ? (
+            <Card className="flex justify-center py-10">
+              <Spinner label="Reading the card" />
+            </Card>
+          ) : (
+            <TapPanel reader={reader} onManualEntry={onTap} busy={false} />
+          )}
+
+          {simulatorCards.length > 0 && reader.simulate ? (
+            <div className="flex flex-wrap justify-center gap-2">
+              {simulatorCards.map((card) => (
+                <Button
+                  key={card.id}
+                  size="sm"
+                  tone="neutral"
+                  onClick={() => reader.simulate?.({ kind: 'MANUAL_REF', value: card.cardRef })}
+                >
+                  {card.displayName ?? card.cardRef}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -196,10 +338,36 @@ export function PosTerminal({
                 Clear
               </Button>
             ) : null}
-            {/* Shift change happens at the counter, so the way out lives here. */}
+            {holder ? (
+              <Button size="sm" tone="neutral" onClick={startNextCustomer}>
+                Cancel sale
+              </Button>
+            ) : null}
+            {canReturnToAdmin ? (
+            <Link
+              href="/admin"
+              className="rounded-lg px-2 py-2 text-sm font-medium text-brand-600 hover:bg-ink-50"
+            >
+              Console
+            </Link>
+          ) : null}
+          {/* Shift change happens at the counter, so the way out lives here. */}
             <SignOutButton confirmWhen={lines.length > 0} />
           </span>
         </div>
+
+        {holder ? (
+          <div className="mx-auto mt-3 flex max-w-3xl items-center justify-between gap-3 rounded-xl bg-ink-50 px-3 py-2">
+            <span className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ink-900">{holder.displayName}</p>
+              <p className="tabular text-xs text-ink-400">{holder.cardRef}</p>
+            </span>
+            <span className="text-right">
+              <p className="text-xs uppercase tracking-wide text-ink-500">Balance</p>
+              <Points value={holder.balance} />
+            </span>
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto max-w-3xl space-y-4 p-4">
@@ -226,6 +394,9 @@ export function PosTerminal({
                 product.trackInventory === true &&
                 product.quantityOnHand !== null &&
                 product.quantityOnHand <= inBasket;
+              // Marked, not disabled: the cashier may still want it and drop
+              // something else, and a dead button explains nothing.
+              const overBalance = remaining !== null && product.pricePoints > remaining;
 
               return (
                 <button
@@ -248,6 +419,8 @@ export function PosTerminal({
                       </span>
                     ) : soldOut ? (
                       <span className="text-xs font-semibold text-danger-700">Sold out</span>
+                    ) : overBalance ? (
+                      <span className="text-xs font-semibold text-warn-800">Over balance</span>
                     ) : null}
                   </span>
                 </button>
@@ -294,19 +467,57 @@ export function PosTerminal({
             <Points value={total} size="lg" />
           </div>
 
-          {stage === 'charging' ? (
+          {holder && remaining !== null ? (
+            <div className="mb-3 flex items-baseline justify-between border-t border-ink-100 pt-3">
+              <span className="text-sm font-semibold uppercase tracking-wide text-ink-500">
+                {shortfall > 0 ? 'Short by' : 'Left after this'}
+              </span>
+              <Points value={shortfall > 0 ? shortfall : remaining} />
+            </div>
+          ) : null}
+
+          {toppingUp && holder ? (
+            <TillTopUpSheet
+              holder={holder}
+              suggested={Math.min(shortfall, posTopUpLimit)}
+              limit={posTopUpLimit}
+              storeId={storeId}
+              terminalId={terminalId}
+              onCancel={() => setToppingUp(false)}
+              onLoaded={(balance) => {
+                setHolder({ ...holder, balance });
+                setToppingUp(false);
+              }}
+            />
+          ) : stage === 'charging' ? (
             <div className="flex items-center justify-center rounded-2xl bg-brand-50 py-6">
               <Spinner label="Charging the card" />
             </div>
           ) : lines.length === 0 ? (
             <p className="rounded-2xl bg-ink-50 py-6 text-center text-sm text-ink-500">
-              Add items, then tap the card.
+              {tapFirst ? 'Add items to the basket.' : 'Add items, then tap the card.'}
             </p>
+          ) : tapFirst ? (
+            shortfall > 0 ? (
+              canTillTopUp && posTopUpLimit > 0 ? (
+                <Button size="lg" fullWidth tone="warn" onClick={() => setToppingUp(true)}>
+                  Add balance — short by {shortfall.toLocaleString()}
+                </Button>
+              ) : (
+                <p className="rounded-2xl bg-warn-50 py-4 text-center text-sm font-semibold text-warn-800">
+                  Short by {shortfall.toLocaleString()} points. Send them to the top-up desk.
+                </p>
+              )
+            ) : (
+              <Button size="lg" fullWidth onClick={() => void chargeHolder()}>
+                Charge {total.toLocaleString()} points
+              </Button>
+            )
           ) : (
             <TapPanel reader={reader} onManualEntry={onTap} busy={false} />
           )}
 
-          {simulatorCards.length > 0 && reader.simulate ? (
+          {!tapFirst && simulatorCards.length > 0 && reader.simulate ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {simulatorCards.map((card) => (
                 <Button
@@ -323,6 +534,133 @@ export function PosTerminal({
         </div>
       </footer>
     </div>
+  );
+}
+
+/**
+ * Taking cash at the till, without leaving the sale.
+ *
+ * The amount defaults to exactly the shortfall, because that is what the
+ * customer is being asked for and rounding it up is the cashier deciding to
+ * hold someone else's money. The PIN is asked for every time: the terminal is
+ * signed in for a whole shift, so the PIN is the only thing that ties a minted
+ * point to a person.
+ */
+function TillTopUpSheet({
+  holder,
+  suggested,
+  limit,
+  storeId,
+  terminalId,
+  onCancel,
+  onLoaded,
+}: {
+  holder: ResolvedCard;
+  suggested: number;
+  limit: number;
+  storeId: string;
+  terminalId: string | null;
+  onCancel: () => void;
+  onLoaded: (balance: number) => void;
+}): React.ReactElement {
+  const [amount, setAmount] = useState(Math.max(1, suggested));
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const presets = [suggested, 100, 250, 500, 1_000].filter(
+    (value, index, all) => value > 0 && value <= limit && all.indexOf(value) === index,
+  );
+
+  async function load(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ recipients: { balanceAfter: number }[] }>('/api/pos/top-up', {
+        method: 'POST',
+        idempotencyKey: newIdempotencyKey(),
+        body: { userId: holder.userId, amountPoints: amount, storeId, terminalId, pin },
+      });
+      const balance = result.recipients[0]?.balanceAfter;
+      if (balance === undefined) throw new ApiError(500, 'no_balance', 'No balance came back.');
+      onLoaded(balance);
+    } catch (failure) {
+      setError(
+        failure instanceof ApiError ? failure.message : 'That top-up did not go through.',
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-baseline justify-between">
+        <p className="text-sm font-bold text-ink-900">Add balance</p>
+        <p className="text-xs text-ink-500">Limit {limit.toLocaleString()} per top-up</p>
+      </div>
+
+      {error ? (
+        <Alert tone="danger" title="Not loaded">
+          {error}
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {presets.map((preset) => (
+          <Button
+            key={preset}
+            size="sm"
+            tone={amount === preset ? 'brand' : 'neutral'}
+            onClick={() => setAmount(preset)}
+          >
+            {preset.toLocaleString()}
+          </Button>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          type="number"
+          min={1}
+          max={limit}
+          value={amount}
+          aria-label="Top-up amount"
+          onChange={(event) =>
+            setAmount(Math.max(0, Math.min(limit, Number(event.target.value))))
+          }
+          className="tabular w-full rounded-xl border border-ink-300 px-3 py-2.5 text-sm"
+        />
+        <input
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="Staff PIN"
+          aria-label="Staff PIN"
+          value={pin}
+          onChange={(event) => setPin(event.target.value)}
+          className="tabular w-32 rounded-xl border border-ink-300 px-3 py-2.5 text-sm"
+        />
+      </div>
+
+      {busy ? (
+        <div className="flex justify-center py-3">
+          <Spinner label="Loading the card" />
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button fullWidth tone="neutral" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            fullWidth
+            disabled={amount < 1 || amount > limit || pin.length < 4}
+            onClick={() => void load()}
+          >
+            Load {amount.toLocaleString()}
+          </Button>
+        </div>
+      )}
+    </Card>
   );
 }
 

@@ -180,3 +180,101 @@ export const setAccountCredentialsSchema = z.object({
   newEmail: z.string().email().max(200).nullish(),
   newPassword: z.string().min(12).max(200).nullish(),
 });
+
+export const challengeCreateSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase words separated by hyphens.')
+    .max(100),
+  description: z.string().trim().max(2000).nullish(),
+  // Zero is allowed on either side but not both — a challenge can pay only
+  // score, or only spendable points. The service refuses the both-zero case.
+  rewardPoints: z.number().int().min(0),
+  rewardScorePoints: z.number().int().min(0).optional(),
+  maxCompletionsPerUser: z.number().int().min(1).optional(),
+  startsAt: z.coerce.date().nullish(),
+  endsAt: z.coerce.date().nullish(),
+});
+
+export const challengeStatusSchema = z.object({
+  status: z.enum(['DRAFT', 'ACTIVE', 'ENDED']),
+});
+
+export const challengeAwardSchema = z.object({ userId: uuid });
+
+export const rewardCreateSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  description: z.string().trim().max(2000).nullish(),
+  type: z.enum(['PRODUCT', 'EXPERIENCE', 'PRIVILEGE', 'DIGITAL']).optional(),
+  costPoints: z.number().int().min(0),
+  /** null means unlimited. */
+  stock: z.number().int().min(0).nullish(),
+  productId: uuid.nullish(),
+});
+
+export const rewardPatchSchema = z.object({
+  name: z.string().trim().min(2).max(200).optional(),
+  description: z.string().trim().max(2000).nullish(),
+  costPoints: z.number().int().min(0).optional(),
+  stock: z.number().int().min(0).nullish(),
+  isActive: z.boolean().optional(),
+});
+
+/** Omit userId to redeem for yourself; supplying one needs reward.redeem.any. */
+export const rewardRedeemSchema = z.object({ userId: uuid.optional() });
+
+export const redemptionCancelSchema = z.object({ reason });
+
+/* Bulk removal ------------------------------------------------------------ */
+
+const removalIds = z.array(uuid).min(1).max(1_000);
+
+export const removalPreviewSchema = z.object({ ids: removalIds });
+
+/** A longer minimum than the shared `reason`: this one ends up in the audit log
+ *  as the only explanation for why a row is gone. */
+export const removalCommitSchema = z.object({
+  ids: removalIds,
+  reason: z.string().trim().min(5).max(500),
+});
+
+/** A till top-up carries no reason field: the reason is always "at the till",
+ *  and the PIN is mandatory rather than threshold-driven. */
+export const posTopUpSchema = z.object({
+  userId: uuid,
+  amountPoints: positivePoints,
+  /** The till taking the cash. Authority is scoped to it, as it is for a sale. */
+  storeId: uuid,
+  terminalId: uuid.nullish(),
+  pin: z.string().regex(/^\d{4,12}$/),
+});
+
+/* Roles and staff accounts ------------------------------------------------ */
+
+const permissionKeys = z.array(z.string().min(1).max(100)).max(200);
+
+export const roleCreateSchema = z.object({
+  key: z.string().trim().min(3).max(40),
+  name: z.string().trim().min(2).max(100),
+  description: z.string().trim().max(500).nullish(),
+  permissions: permissionKeys,
+});
+
+export const rolePermissionsSchema = z.object({ permissions: permissionKeys });
+
+export const staffCreateSchema = z.object({
+  displayName: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email().max(320),
+  password: z.string().min(12).max(1024),
+  roleKey: z.string().trim().min(2).max(40),
+  storeId: uuid.nullish(),
+});
+
+export const staffRoleSchema = z.object({
+  userId: uuid,
+  roleKey: z.string().trim().min(2).max(40),
+  storeId: uuid.nullish(),
+});

@@ -44,6 +44,7 @@ export default async function CardsPage(): Promise<React.ReactElement> {
       canSuspend={session.actor.can('card.suspend', { eventId: session.eventId })}
       canReplace={session.actor.can('card.replace', { eventId: session.eventId })}
       canCreate={session.actor.can('card.write', { eventId: session.eventId })}
+      canRemove={session.actor.can('card.remove', { eventId: session.eventId })}
     />
   );
 }

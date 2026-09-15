@@ -3,7 +3,6 @@ import type { Database, Executor, Transaction } from '../db/client';
 import {
   accounts,
   approvalRequests,
-  events,
   ledgerEntries,
   ledgerTransactions,
   teamMembers,
@@ -20,13 +19,13 @@ import { getEventSettings } from '../settings/service';
 import {
   ApprovalRequiredError,
   ConflictError,
-  EventNotOperationalError,
   FeatureDisabledError,
   LimitExceededError,
   NotFoundError,
   ValidationError,
 } from '../errors';
 import {
+  assertEventAcceptsPoints,
   getSystemAccount,
   getTeamAccount,
   getUserAccount,
@@ -927,6 +926,71 @@ function decodeCursor(cursor: string): { createdAt: string; id: string } | null 
 }
 
 /* -------------------------------------------------------------------------- */
+/* Till top-up                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Take cash at the till from a customer who is short mid-sale.
+ *
+ * This is `topUpUser` with a second, tighter ceiling on top of it. The point of
+ * the separate cap is that the two ceilings answer different questions:
+ * `maxSingleTopUp` is how much the event will ever issue in one go, while
+ * `posTopUpLimit` is how much a cashier may issue without an admin — so it is
+ * set from how much cash a till is trusted to hold, not from the size of the
+ * event. Setting it to zero closes the till to minting entirely and leaves that
+ * to the admin desk.
+ *
+ * Everything below the cap still goes through the ordinary top-up path, so the
+ * approval threshold, the issuance account and the idempotency guard all apply
+ * exactly as they do at the counter.
+ */
+export async function topUpAtTill(
+  db: Database,
+  input: {
+    eventId: string;
+    userId: string;
+    amountPoints: number;
+    terminalId?: string | null;
+    createdBy: string;
+  },
+  idempotencyKey: string,
+  context: AuditContext,
+): Promise<{ result: TopUpResult; replayed: boolean }> {
+  const settings = await getEventSettings(db, input.eventId);
+
+  if (settings.posTopUpLimit <= 0) {
+    throw new FeatureDisabledError(
+      'posTopUpLimit',
+      'Top-ups at the till are turned off for this event. Send the customer to the top-up desk.',
+    );
+  }
+
+  if (input.amountPoints > settings.posTopUpLimit) {
+    throw new LimitExceededError(
+      'posTopUpLimit',
+      settings.posTopUpLimit,
+      input.amountPoints,
+      `A till top-up cannot exceed ${settings.posTopUpLimit.toLocaleString()} points. Anything larger goes through the top-up desk.`,
+    );
+  }
+
+  return topUpUser(
+    db,
+    {
+      eventId: input.eventId,
+      userId: input.userId,
+      amountPoints: input.amountPoints,
+      reason: 'Top-up at the till',
+      source: 'POS_COUNTER',
+      terminalId: input.terminalId ?? null,
+      createdBy: input.createdBy,
+    },
+    idempotencyKey,
+    context,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Guards                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -948,15 +1012,3 @@ function assertReason(reason: string, minLength = 3): void {
   }
 }
 
-/** Points cannot be issued once an event has ended or been archived. */
-async function assertEventAcceptsPoints(db: Executor, eventId: string): Promise<void> {
-  const [event] = await db
-    .select({ status: events.status })
-    .from(events)
-    .where(eq(events.id, eventId))
-    .limit(1);
-  if (!event) throw new NotFoundError('That event');
-  if (event.status === 'ENDED' || event.status === 'ARCHIVED') {
-    throw new EventNotOperationalError(event.status, 'issuing points');
-  }
-}

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { and, eq, lt, sql } from 'drizzle-orm';
-import type { Database, Transaction } from '../db/client';
+import { isUniqueViolation, type Database, type Transaction } from '../db/client';
 import { idempotencyKeys } from '../db/schema';
 import { IdempotencyConflictError, RequestInProgressError } from '../errors';
 
@@ -124,15 +124,6 @@ function assertReusable<T>(record: StoredKey, requestHash: string): T {
     throw new RequestInProgressError();
   }
   return record.responseBody as T;
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '23505'
-  );
 }
 
 /** Housekeeping: drop expired keys. Safe to run on a schedule. */

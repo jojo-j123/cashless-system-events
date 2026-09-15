@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/auth/server';
 import { getWalletSummary, getWalletTransactions } from '@/lib/services/wallet';
 import { getTeamLeaderboard } from '@/lib/services/reports';
 import { getEventSettings } from '@/lib/settings/service';
+import { showsStandingsToParticipants } from '@/lib/settings/modes';
 import { eventParticipants, nfcCards, teamMembers, teams, users } from '@/lib/db/schema';
 import { ParticipantDashboard } from '@/components/participant/ParticipantDashboard';
 
@@ -51,9 +52,11 @@ export default async function ParticipantPage(): Promise<React.ReactElement> {
     .orderBy(desc(nfcCards.assignedAt))
     .limit(1);
 
+  const showStandings = showsStandingsToParticipants(settings);
+
   const [history, standings] = await Promise.all([
     getWalletTransactions(session.db, wallet.accountId, { limit: 20 }),
-    settings.leaderboardVisibleToParticipants
+    showStandings
       ? getTeamLeaderboard(session.db, session.eventId, settings.teamRankingMetric)
       : Promise.resolve([]),
   ]);
@@ -68,7 +71,7 @@ export default async function ParticipantPage(): Promise<React.ReactElement> {
       wallet={wallet}
       card={card ?? null}
       team={
-        profile?.teamId
+        settings.gameModeEnabled && profile?.teamId
           ? {
               name: profile.teamName ?? '',
               color: profile.teamColor ?? '#475569',
