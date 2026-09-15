@@ -21,6 +21,9 @@ const NAV: {
 }[] = [
   { href: '/admin', label: 'Dashboard', permission: 'report.read' },
   { href: '/admin/enrol', label: 'Add a card', permission: 'card.write' },
+  // The till itself, not an admin view of it. An admin holds `pos.operate`
+  // across every store, so this is the one link here that leaves the console.
+  { href: '/pos', label: 'Till', permission: 'pos.operate' },
   { href: '/admin/points', label: 'Top-ups', permission: 'wallet.topup' },
   { href: '/admin/participants', label: 'People', permission: 'participant.read.any' },
   { href: '/admin/cards', label: 'Cards', permission: 'card.read' },

@@ -127,3 +127,36 @@ describe('till top-up', () => {
     expect(cashier?.can('wallet.topup', atStore)).toBe(false);
   });
 });
+
+describe('store-scoped grants and where a role lands', () => {
+  /**
+   * The trap this guards is that `can(permission, { eventId })` reads as "may
+   * they do this in this event" but means "may they do this with no store",
+   * and a cashier's every grant carries one. The root route used to decide a
+   * cashier's landing page that way and sent the entire till staff to the
+   * participant dashboard.
+   */
+  it('answers false for a cashier when the scope names no store', async () => {
+    const cashier = await loadActor(world.db, world.cashierId, world.eventId);
+
+    expect(cashier?.can('pos.operate', { eventId: world.eventId })).toBe(false);
+    expect(cashier?.can('pos.operate', { eventId: world.eventId, storeId: world.storeId })).toBe(
+      true,
+    );
+    // Which is why routing asks the question this way instead.
+    expect(cashier?.canAnywhere('pos.operate', world.eventId)).toBe(true);
+  });
+
+  it('keeps an admin able to work any till', async () => {
+    const admin = await loadActor(world.db, world.adminId, world.eventId);
+
+    expect(admin?.canAnywhere('pos.operate', world.eventId)).toBe(true);
+    expect(admin?.can('pos.operate', { eventId: world.eventId, storeId: world.otherStoreId })).toBe(
+      true,
+    );
+    // And so to see the console link back out of the till.
+    expect(admin?.canAnywhere('report.read', world.eventId)).toBe(true);
+    const cashier = await loadActor(world.db, world.cashierId, world.eventId);
+    expect(cashier?.canAnywhere('report.read', world.eventId)).toBe(false);
+  });
+});

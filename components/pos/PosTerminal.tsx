@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CardCredential } from '@/lib/nfc/credentials';
 import type { ResolvedCard } from '@/lib/services/cards';
@@ -61,6 +62,7 @@ export function PosTerminal({
   posFlow,
   posTopUpLimit,
   canTillTopUp,
+  canReturnToAdmin,
 }: {
   stores: StoreOption[];
   simulatorCards: SimulatorCard[];
@@ -68,6 +70,9 @@ export function PosTerminal({
   posFlow: 'RING_FIRST' | 'TAP_FIRST';
   posTopUpLimit: number;
   canTillTopUp: boolean;
+  /** Admins arrive here from the console and need a way back that is not
+   *  signing out; a cashier on a shift has nowhere else to be. */
+  canReturnToAdmin: boolean;
 }): React.ReactElement {
   const tapFirst = posFlow === 'TAP_FIRST';
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
@@ -251,7 +256,17 @@ export function PosTerminal({
       <div className="flex min-h-screen flex-col bg-ink-100">
         <header className="flex items-center justify-between border-b border-ink-200 bg-white px-4 py-3">
           <p className="text-sm font-bold text-ink-900">{store?.name ?? 'No store'}</p>
+          <span className="flex items-center gap-2">
+            {canReturnToAdmin ? (
+            <Link
+              href="/admin"
+              className="rounded-lg px-2 py-2 text-sm font-medium text-brand-600 hover:bg-ink-50"
+            >
+              Console
+            </Link>
+          ) : null}
           <SignOutButton confirmWhen={false} />
+          </span>
         </header>
 
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 p-4">
@@ -328,7 +343,15 @@ export function PosTerminal({
                 Cancel sale
               </Button>
             ) : null}
-            {/* Shift change happens at the counter, so the way out lives here. */}
+            {canReturnToAdmin ? (
+            <Link
+              href="/admin"
+              className="rounded-lg px-2 py-2 text-sm font-medium text-brand-600 hover:bg-ink-50"
+            >
+              Console
+            </Link>
+          ) : null}
+          {/* Shift change happens at the counter, so the way out lives here. */}
             <SignOutButton confirmWhen={lines.length > 0} />
           </span>
         </div>

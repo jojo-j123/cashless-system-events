@@ -82,6 +82,7 @@ export default async function PosPage(): Promise<React.ReactElement> {
       // whether they hold it anywhere in this event; the route re-checks it
       // against the actual till when the top-up is submitted.
       canTillTopUp={session.actor.canAnywhere('wallet.topup.pos', session.eventId)}
+      canReturnToAdmin={session.actor.canAnywhere('report.read', session.eventId)}
     />
   );
 }
